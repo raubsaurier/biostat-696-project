@@ -30,27 +30,64 @@ airData2005$state <- tolower(as.character(airData2005$State))
 ## let's just plot pollution totals for now and ignore what type of pollution it is: 
 graphData <- airData2005[,list(Value= sum(na.omit(Value))), by=list(stateFIPS, County, Year, state)]
 
-## load in map of US by states from the "maps" package
+# just plot for one year: 
+
 states <- map_data("state")
+# ggplot2::map_data - turn data from the maps package into a data frame suitable for plotting with ggplot2
+# states is a data frame that has lat/long coordinates of the states
+counties <- map_data("county")
+# counties is a data fram that has lat/long coordinates of the counties
 
-## will use this later 
-trump.pct <- continentalData$pct.Trump
-# dataset with two variables - state and % of trump votes 
-trumpData <- continentalData[,c("fips", "pct.Trump")]
+airData2005 <- airData[Year==2005]
+airData2005$region <- tolower(as.character(airData2005$State))
+airData2005$subregion <- tolower(as.character(airData2005$County))
 
-# get the quintile breaks for plotting 
-trumpData$quintile_breaks <- cut(trumpData$pct.Trump, quantile(trumpData$pct.Trump, c(0, 0.2, 0.4, 0.6, 0.8, 1)))
+graphData2005 <- merge(airData2005, counties, allow.cartesian=TRUE)
+# merge 2005 data to states so it can be graphed with ggplot2
 
-## plot the quintile-level % of voters for Trump in 2016 on a state level
-plot_usmap(data = trumpData, values = "quintile_breaks", lines = "black") + 
-  scale_fill_brewer(palette="Reds", name="% of Trump Votes by State \n measured in Quintile") +
-  theme(legend.position = "right") + 
-  labs(title="2016 Election Data - % of Trump Voters by State") 
-## plot the pollution values: 
+pdf("2005 concentrations.pdf")
+ggplot() +
+  geom_polygon(data = states, aes(x = long, y = lat, group = group), fill = "white", color = "black") +
+  geom_polygon(data = graphData2005, aes(x = long, y = lat, group = group, fill = Value)) +
+  facet_wrap(~ Pollutant)
+dev.off()
+# looks as if Acetaldehyde and Formaldehyde have the most variation in the data
 
-ggplot(data = states) + 
-  geom_polygon(data=graphData, aes(x = long, y = lat, fill = Value, group = group), color = "white") + 
-  coord_fixed(1.3)
+graphData2005$logValue = ifelse(graphData2005$Value != 0, log(graphData2005$Value), log(graphData2005$Value + .0001))
+pdf("2005 logconcentrations.pdf")
+ggplot() +
+  geom_polygon(data = states, aes(x = long, y = lat, group = group), fill = "white", color = "black") +
+  geom_polygon(data = graphData2005, aes(x = long, y = lat, group = group, fill = logValue)) +
+  facet_wrap(~ Pollutant)
+dev.off()
+# on the log scale butadiene has the most variation in values
+
+
+
+airData2011 <- airData[Year==2011]
+airData2011$region <- tolower(as.character(airData2011$State))
+airData2011$subregion <- tolower(as.character(airData2011$County))
+
+graphData2011 <- merge(airData2011, counties, allow.cartesian=TRUE)
+# merge 2005 data to states so it can be graphed with ggplot2
+
+pdf("2011 concentrations.pdf")
+ggplot() +
+  geom_polygon(data = states, aes(x = long, y = lat, group = group), fill = "white", color = "black") +
+  geom_polygon(data = graphData2011, aes(x = long, y = lat, group = group, fill = Value)) +
+  facet_wrap(~ Pollutant)
+dev.off()
+# looks as if Acetaldehyde and Formaldehyde have the most variation in the data
+
+graphData2011$logValue = ifelse(graphData2011$Value != 0, log(graphData2011$Value), log(graphData2011$Value + .0001))
+pdf("2011 logconcentrations.pdf")
+ggplot() +
+  geom_polygon(data = states, aes(x = long, y = lat, group = group), fill = "white", color = "black") +
+  geom_polygon(data = graphData2011, aes(x = long, y = lat, group = group, fill = logValue)) +
+  facet_wrap(~ Pollutant)
+dev.off()
+# on the log scale butadiene has the most variation
+
 
 #### Asthma data for Kansas by County for 2000-2017 #####
 
