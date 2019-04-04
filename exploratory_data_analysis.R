@@ -29,6 +29,7 @@ airData <- data.table(read.csv("data_174749.csv"))
 airData$pollutant_count <- 1
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 # just plot for one year: 
 airData2005 <- airData[Year==2005]
 airData2005$state <- tolower(as.character(airData2005$State))
@@ -116,17 +117,17 @@ get_fips <- function(state, county){
 ## get the FIPS number for each county in Kansas 
 countyData$fips <- mapply(get_fips, "Kansas", countyData$Location)
 
+=======
+>>>>>>> FETCH_HEAD
 # dataset with two variables - FIPs number and the rates 
 graphData <- countyData[,c("fips", "Data")]
 graphData$Data <- as.numeric(graphData$Data)
 
-## check what the median rate is 
-median(graphData$Data)
-
 ## plot  on a state level
-plot_usmap(include = "KS", data = graphData, values = "Data", lines = "black") + 
-  scale_fill_gradient2(low="blue",midpoint=median(graphData$Data), high="red", name="Asthma Rates") +
+plot_usmap(include = "KY", data = graphData, values = "Data", lines = "black") + 
+  scale_fill_gradient2(low="green",midpoint=median(na.omit(graphData$Data)), high="red", name="Asthma Hospitalization \n Rates") +
   theme(legend.position = "right") + 
+<<<<<<< HEAD
   labs(title="2011 Asthma Rates per 1,000 Population - Kansas County Level") 
 
 
@@ -148,8 +149,6 @@ get_fips <- function(state, county){
 ## get the FIPS number for each county in KY
 countyData$fips <- mapply(get_fips, "KY", countyData$Location)
 
-=======
->>>>>>> FETCH_HEAD
 # dataset with two variables - FIPs number and the rates 
 graphData <- countyData[,c("fips", "Data")]
 graphData$Data <- as.numeric(graphData$Data)
@@ -158,6 +157,8 @@ graphData$Data <- as.numeric(graphData$Data)
 plot_usmap(include = "KY", data = graphData, values = "Data", lines = "black") + 
   scale_fill_gradient2(low="green",midpoint=median(na.omit(graphData$Data)), high="red", name="Asthma Hospitalization \n Rates") +
   theme(legend.position = "right") + 
+=======
+>>>>>>> FETCH_HEAD
   labs(title="2010-2012 Average Asthma Rates per 1,000 Population - KY County Level") 
 
 pdf("2011 concentrations.pdf")
