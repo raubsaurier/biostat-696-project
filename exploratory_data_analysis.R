@@ -127,7 +127,6 @@ plot_usmap(include = "KY", data = graphData, values = "Data", lines = "black") +
   scale_fill_gradient2(low="green",midpoint=median(na.omit(graphData$Data)), high="red", name="Asthma Hospitalization \n Rates") +
   theme(legend.position = "right") + 
   labs(title="2010-2012 Average Asthma Rates per 1,000 Population - KY County Level") 
->>>>>>> FETCH_HEAD
 
 pdf("2011 concentrations.pdf")
 ggplot() +
