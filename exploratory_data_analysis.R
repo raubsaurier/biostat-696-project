@@ -91,35 +91,7 @@ airData2011$region <- tolower(as.character(airData2011$State))
 airData2011$subregion <- tolower(as.character(airData2011$County))
 
 graphData2011 <- merge(airData2011, counties, allow.cartesian=TRUE)
-# merge 2005 data to states so it can be graphed with ggplot2
-
-
-pdf("2005 concentrations.pdf")
-ggplot() +
-  geom_polygon(data = states, aes(x = long, y = lat, group = group), fill = "white", color = "black") +
-  geom_polygon(data = graphData2005, aes(x = long, y = lat, group = group, fill = Value)) +
-  facet_wrap(~ Pollutant)
-dev.off()
-# looks as if Acetaldehyde and Formaldehyde have the most variation in the data
-
-graphData2005$logValue = ifelse(graphData2005$Value != 0, log(graphData2005$Value), log(graphData2005$Value + .0001))
-pdf("2005 logconcentrations.pdf")
-ggplot() +
-  geom_polygon(data = states, aes(x = long, y = lat, group = group), fill = "white", color = "black") +
-  geom_polygon(data = graphData2005, aes(x = long, y = lat, group = group, fill = logValue)) +
-  facet_wrap(~ Pollutant)
-dev.off()
-
-
-# dataset with two variables - FIPs number and the rates 
-graphData <- countyData[,c("fips", "Data")]
-graphData$Data <- as.numeric(graphData$Data)
-
-## plot  on a state level
-plot_usmap(include = "KY", data = graphData, values = "Data", lines = "black") + 
-  scale_fill_gradient2(low="green",midpoint=median(na.omit(graphData$Data)), high="red", name="Asthma Hospitalization \n Rates") +
-  theme(legend.position = "right") + 
-  labs(title="2010-2012 Average Asthma Rates per 1,000 Population - KY County Level") 
+# merge 2011 data to states so it can be graphed with ggplot2
 
 pdf("2011 concentrations.pdf")
 ggplot() +
@@ -127,7 +99,6 @@ ggplot() +
   geom_polygon(data = graphData2011, aes(x = long, y = lat, group = group, fill = Value)) +
   facet_wrap(~ Pollutant)
 dev.off()
-
 # looks as if Acetaldehyde and Formaldehyde have the most variation in the data
 
 graphData2011$logValue = ifelse(graphData2011$Value != 0, log(graphData2011$Value), log(graphData2011$Value + .0001))
@@ -138,7 +109,6 @@ ggplot() +
   facet_wrap(~ Pollutant)
 dev.off()
 # on the log scale butadiene has the most variation
-
 
 #### Asthma data for Kansas by County for 2000-2017 #####
 ## --- --- --- --- --- --- --- --- 
@@ -210,20 +180,3 @@ plot_usmap(include = "KY", data = graphData, values = "Data", lines = "black") +
   scale_fill_gradient2(low="green",midpoint=median(na.omit(graphData$Data)), high="red", name="Asthma Hospitalization \n Rates") +
   theme(legend.position = "right") + 
   labs(title="2010-2012 Average Asthma Rates per 1,000 Population - KY County Level") 
-
-pdf("2011 concentrations.pdf")
-ggplot() +
-  geom_polygon(data = states, aes(x = long, y = lat, group = group), fill = "white", color = "black") +
-  geom_polygon(data = graphData2011, aes(x = long, y = lat, group = group, fill = Value)) +
-  facet_wrap(~ Pollutant)
-dev.off()
-  # looks as if Acetaldehyde and Formaldehyde have the most variation in the data
-
-graphData2011$logValue = ifelse(graphData2011$Value != 0, log(graphData2011$Value), log(graphData2011$Value + .0001))
-pdf("2011 logconcentrations.pdf")
-ggplot() +
-  geom_polygon(data = states, aes(x = long, y = lat, group = group), fill = "white", color = "black") +
-  geom_polygon(data = graphData2011, aes(x = long, y = lat, group = group, fill = logValue)) +
-  facet_wrap(~ Pollutant)
-dev.off()
-  # on the log scale butadiene has the most variation
