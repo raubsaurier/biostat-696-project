@@ -1,6 +1,6 @@
 
 #### ---------------------------------------------
-###   Air Quality Data Analysis 
+###   Script for Analyzing the Covariate Data
 #### ---------------------------------------------
 
 ## load libraries
@@ -76,4 +76,57 @@ plot_usmap(data =smoking2016, values = "pct_daily_smokers", lines = "black") +
   theme(legend.position = "right") + 
   labs(title="2016 % Of Daily Smokers by State")
 
+
+#### ---------------------------------------------
+###   2016 % of Adults who are Obese 
+#### ---------------------------------------------
+
+obesity2016 <- data.table(read.csv("adult_obesity_2016.csv"))
+setnames(obesity2016, c("Data_Value", "LocationAbbr","Low_Confidence_Limit","High_Confidence_Limit"), 
+         c("pct_obesity", "stateID", "obesity_95_lb", "obesity_95_ub"))
+
+## subset based on the values we want 
+aggregatedObesity <-  obesity2016[,c("stateID","pct_obesity", "YearStart", "obesity_95_lb", "obesity_95_ub")]
+
+aggregatedObesity <- aggregatedObesity[!stateID%in%c("US", "AK", "HI")]
+
+## make a visualization of this data 
+aggregatedObesity$fips <- fips(aggregatedObesity$stateID)
+
+plot_usmap(data =aggregatedObesity, values = "pct_obesity", lines = "black") + 
+  scale_fill_gradientn(colours=blue2red(10), name="Obesity Rate (in %)") +
+  theme(legend.position = "right") + 
+  labs(title="2016 Adult Obesity Rate by State")
+
+
+#### ---------------------------------------------
+###   Merge The Covariate Datasets 
+#### ---------------------------------------------
+
+ozoneData <- aggregatedAirData[Defining.Parameter=="Ozone"]
+totalData <- merge(aggregatedObesity, smoking2016, by="fips")
+totalData <- merge(totalData, ozoneData, by="fips")
+
+
+## check for correlations 
+
+corrVars <- totalData[,c("pct_obesity", "pct_daily_smokers", "log_mean_AQI")]
+cor(corrVars)
+
+## the results show that smoking and obesity rates appear to be positively correlated
+#whereas AQI tends to be negatively correlated with smoking rate and obesity rate 
+
+## load in the 2016 Child Asthma Prevalence Data 
+
+asthma2016 <- data.table(read_csv("2016prevalence"))
+## we notice right away that some states are missing from the 2016 CDC prevalence estimates 
+
+setnames(asthma2016, c( "sampled_count", "prevalence","prev_error", "total_count"), c("asthma_sample", "asthma_prev", 
+                                                                                      "asthma_prev_error", "asthma_total_count"))
+## get fips: 
+asthma2016$fips <- fips(asthma2016$state)
+
+
+asthma_subset <- asthma2016[,c("fips", "asthma_prev",
+                               "asthma_prev_error", "asthma_sample", "asthma_total_count")]
 
