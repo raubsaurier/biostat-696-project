@@ -56,6 +56,11 @@ for (k in 1:length(pollute_types)){
 ## however, for ozone, we have data for all 50 states 
 ## also, it has been established that asthma can be triggered by ozone, so moving forward, we will proceed with ozone only analysis
 
+plot_usmap(data =ozoneData, values = "log_mean_AQI", lines = "black") + 
+  scale_fill_gradientn(colours=blue2red(10), name="Log Mean AQI") +
+  theme(legend.position = "right") + 
+  labs(title="2016 Air Quality by State for Ozone")
+
 #### ---------------------------------------------
 ###   2016 % of Adults who report smoking daily 
 #### ---------------------------------------------
@@ -118,15 +123,41 @@ cor(corrVars)
 
 ## load in the 2016 Child Asthma Prevalence Data 
 
-asthma2016 <- data.table(read_csv("2016prevalence"))
-## we notice right away that some states are missing from the 2016 CDC prevalence estimates 
-
-setnames(asthma2016, c( "sampled_count", "prevalence","prev_error", "total_count"), c("asthma_sample", "asthma_prev", 
-                                                                                      "asthma_prev_error", "asthma_total_count"))
+asthma2016 <- data.table(read.csv("2016 Asthma Prevalence Complete.csv"))
+asthma2016$total_count <- as.numeric(as.numeric(gsub(",", "",asthma2016$total_count)))
+                                     
+setnames(asthma2016, c("Location","total_population", "total_count"), c("state", "asthma_total_pop", "asthma_total_count"))
 ## get fips: 
 asthma2016$fips <- fips(asthma2016$state)
 
+## we notice right away that some states are missing from the 2016 CDC prevalence estimates 
 
-asthma_subset <- asthma2016[,c("fips", "asthma_prev",
-                               "asthma_prev_error", "asthma_sample", "asthma_total_count")]
+asthma_subset <- asthma2016[,c("fips", "state", "asthma_total_pop", "asthma_total_count")]
+asthma_subset$pct_asthma <- asthma_subset$asthma_total_count/asthma_subset$asthma_total_pop
+## plot asthma data :
+
+
+plot_usmap(data =asthma_subset, values = "pct_asthma", lines = "black") + 
+  scale_fill_gradientn(colours=blue2red(10), name="Asthma Rate (in %)") +
+  theme(legend.position = "right") + 
+  labs(title="2016 Child Asthma Prevalence Rate by State")
+
+#### ---------------------------------------------
+###  add this asthma data to the total dataset: 
+#### ---------------------------------------------
+
+totalData <- merge(totalData, asthma_subset, by=c("state", "fips"))
+totalData$pct_obesity <- totalData$pct_obesity/100
+
+
+#### ---------------------------------------------
+###  add the total adult + child pop data to the total dataset: 
+#### ---------------------------------------------
+
+popData <- data.table(read_excel("us_child_adult_population_2008_2017.xlsx"))
+setnames(popData , c("Location","TimeFrame", "Data", "Child and Adult Populations"),
+         c("state", "year", "pop_count", "pop_type"))
+
+popData$year <- as.numeric(popData$year)
+popData <- popData[year==2016]
 
