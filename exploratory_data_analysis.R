@@ -18,9 +18,8 @@ library(ggplot2)
 library(maps)
 
 # set working directory to wherever the source files are: 
-#setwd("~/repos/biostat-696-project")
-
-# setwd("~/Documents/BIOSTATS 696 - Spatial Data Analysis/Final Project")
+# setwd("~/repos/biostat-696-project")
+# setwd("~/Documents/BIOSTATS 696 - Spatial Data Analysis/biostat-696-project")
 
 ## --- --- --- --- --- --- --- --- 
 #### Air quality data#### 

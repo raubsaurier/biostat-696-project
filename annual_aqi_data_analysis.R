@@ -19,17 +19,18 @@ library(usmap)
 library(colorRamps)
 
 #setwd("~/repos/biostat-696-project")
+# setwd("~/Documents/BIOSTATS 696 - Spatial Data Analysis/biostat-696-project")
 
 #### ---------------------------------------------
 ###   Smoking Data Analysis 
 #### ---------------------------------------------
 
-## load in smoking data 
+## load in 2016 air quality data 
 airData2016 <- data.table(read.csv("daily_aqi_by_county_2016.csv"))
-## extract month and year from the data 
 
-airData2016$Date <- ymd(airData2016$Date)
-airData2016$year <- year(airData2016$Date)
+## extract month and year from the data 
+airData2016$Date <- lubridate::ymd(airData2016$Date)
+airData2016$year <- lubridate::year(airData2016$Date)
 
 ## we will exclude Alaska and Hawaii from our analysis
 airData2016 <- airData2016[!State.Name%in%c("National", "Alaska", "Hawaii")]
@@ -118,15 +119,19 @@ cor(corrVars)
 
 ## load in the 2016 Child Asthma Prevalence Data 
 
-asthma2016 <- data.table(read_csv("2016prevalence"))
+asthma2016 <- data.table(read.csv("2016 Asthma Prevalence Complete.csv"))
 ## we notice right away that some states are missing from the 2016 CDC prevalence estimates 
+setnames(asthma2016, c("Location", "total_count"), c("state", "asthma_count"))
 
-setnames(asthma2016, c( "sampled_count", "prevalence","prev_error", "total_count"), c("asthma_sample", "asthma_prev", 
-                                                                                      "asthma_prev_error", "asthma_total_count"))
 ## get fips: 
 asthma2016$fips <- fips(asthma2016$state)
 
+## Merge asthma data with covariates
+asthma_data = merge(asthma2016, totalData, by = "fips")
+asthma_data = asthma_data[,c("fips", "state.x", "stateID", "total_population", "asthma_count",
+                             "pct_obesity", "obesity_95_lb", "obesity_95_ub", 
+                             "pct_daily_smokers", "meanAQI", "log_mean_AQI")]
+setnames(asthma_data, c("state.x"), c("state"))
+asthma_data$asthma_count = as.numeric(gsub(",", "", asthma_data$asthma_count, fixed = TRUE))
 
-asthma_subset <- asthma2016[,c("fips", "asthma_prev",
-                               "asthma_prev_error", "asthma_sample", "asthma_total_count")]
-
+write.csv(asthma_data, "2016Asthma_Final.csv", row.names = FALSE)
