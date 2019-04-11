@@ -19,17 +19,19 @@ library(usmap)
 library(colorRamps)
 
 #setwd("~/repos/biostat-696-project")
+# setwd("~/Documents/BIOSTATS 696 - Spatial Data Analysis/biostat-696-project")
+
 
 #### ---------------------------------------------
 ###   Smoking Data Analysis 
 #### ---------------------------------------------
 
-## load in smoking data 
+## load in 2016 air quality data 
 airData2016 <- data.table(read.csv("daily_aqi_by_county_2016.csv"))
-## extract month and year from the data 
 
-airData2016$Date <- ymd(airData2016$Date)
-airData2016$year <- year(airData2016$Date)
+## extract month and year from the data 
+airData2016$Date <- lubridate::ymd(airData2016$Date)
+airData2016$year <- lubridate::year(airData2016$Date)
 
 ## we will exclude Alaska and Hawaii from our analysis
 airData2016 <- airData2016[!State.Name%in%c("National", "Alaska", "Hawaii")]
@@ -61,6 +63,7 @@ plot_usmap(data =ozoneData, values = "log_mean_AQI", lines = "black") +
   theme(legend.position = "right") + 
   labs(title="2016 Air Quality by State for Ozone")
 
+
 #### ---------------------------------------------
 ###   2016 % of Adults who report smoking daily 
 #### ---------------------------------------------
@@ -87,11 +90,11 @@ plot_usmap(data =smoking2016, values = "pct_daily_smokers", lines = "black") +
 #### ---------------------------------------------
 
 obesity2016 <- data.table(read.csv("adult_obesity_2016.csv"))
-setnames(obesity2016, c("Data_Value", "LocationAbbr","Low_Confidence_Limit","High_Confidence_Limit"), 
-         c("pct_obesity", "stateID", "obesity_95_lb", "obesity_95_ub"))
+setnames(obesity2016, c("Data_Value", "LocationAbbr","Low_Confidence_Limit","High_Confidence_Limit", "YearStart"), 
+         c("pct_obesity", "stateID", "obesity_95_lb", "obesity_95_ub", "year"))
 
 ## subset based on the values we want 
-aggregatedObesity <-  obesity2016[,c("stateID","pct_obesity", "YearStart", "obesity_95_lb", "obesity_95_ub")]
+aggregatedObesity <-  obesity2016[,c("stateID","pct_obesity", "year", "obesity_95_lb", "obesity_95_ub")]
 
 aggregatedObesity <- aggregatedObesity[!stateID%in%c("US", "AK", "HI")]
 
@@ -109,8 +112,9 @@ plot_usmap(data =aggregatedObesity, values = "pct_obesity", lines = "black") +
 #### ---------------------------------------------
 
 ozoneData <- aggregatedAirData[Defining.Parameter=="Ozone"]
-totalData <- merge(aggregatedObesity, smoking2016, by="fips")
-totalData <- merge(totalData, ozoneData, by="fips")
+ozoneData <- ozoneData[,c("year", "fips", "log_mean_AQI", "meanAQI")]
+smokingAndObesity <- merge(aggregatedObesity, smoking2016, by="fips")
+covariateData <- merge(smokingAndObesity, ozoneData, by=c("fips", "year"))
 
 
 ## check for correlations 
@@ -146,7 +150,7 @@ plot_usmap(data =asthma_subset, values = "pct_asthma", lines = "black") +
 ###  add this asthma data to the total dataset: 
 #### ---------------------------------------------
 
-totalData <- merge(totalData, asthma_subset, by=c("state", "fips"))
+totalData <- merge(covariateData, asthma_subset, by=c("state", "fips"))
 totalData$pct_obesity <- totalData$pct_obesity/100
 
 
@@ -159,5 +163,39 @@ setnames(popData , c("Location","TimeFrame", "Data", "Child and Adult Population
          c("state", "year", "pop_count", "pop_type"))
 
 popData$year <- as.numeric(popData$year)
-popData <- popData[year==2016]
+popData$fips <- fips(popData$state)
+popData <- na.omit(popData)
+popData <- popData[year==2016&DataFormat=="Number"]
+popsubset <- popData[,c("fips", "pop_count", "pop_type")]
 
+longPop <- spread(popsubset, pop_type, pop_count, fill = 0)
+
+setnames(longPop, c( "Age 18 and over" , "Less than age 18", "Total Population"), c("child_pop", "adult_pop",
+                                                                                    "total_pop"))
+
+
+#$# reshape the dataset so that child & adult pops are separate variables 
+
+totalData <- merge(totalData, longPop,  by="fips")
+
+
+### export as CSV: 
+
+write.csv(totalData, "totalDataset.csv", row.names = FALSE)
+
+
+## we notice right away that some states are missing from the 2016 CDC prevalence estimates 
+setnames(asthma2016, c("Location", "total_count"), c("state", "asthma_count"))
+
+## get fips: 
+asthma2016$fips <- fips(asthma2016$state)
+
+## Merge asthma data with covariates
+asthma_data = merge(asthma2016, totalData, by = "fips")
+asthma_data = asthma_data[,c("fips", "state.x", "stateID", "total_population", "asthma_count",
+                             "pct_obesity", "obesity_95_lb", "obesity_95_ub", 
+                             "pct_daily_smokers", "meanAQI", "log_mean_AQI")]
+setnames(asthma_data, c("state.x"), c("state"))
+asthma_data$asthma_count = as.numeric(gsub(",", "", asthma_data$asthma_count, fixed = TRUE))
+
+write.csv(asthma_data, "2016Asthma_Final.csv", row.names = FALSE)
