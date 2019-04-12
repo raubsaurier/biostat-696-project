@@ -98,7 +98,20 @@ plot_usmap(data =aggregatedObesity, values = "pct_obesity", lines = "black") +
   scale_fill_gradientn(colours=blue2red(10), name="Obesity Rate (in %)") +
   theme(legend.position = "right") + 
   labs(title="2016 Adult Obesity Rate by State")
+#### ---------------------------------------------
+###   Race/Ethnicity Data 
+#### ---------------------------------------------
 
+demographicData <- data.table(read_xlsx("race_ethnicity_data.xlsx"))
+colnames(demographicData) <- as.character(demographicData[1,])
+demographicData <- demographicData[-1,]
+#don't need this column, as it is empty anyway 
+demographicData$Footnotes <- NULL
+
+setnames(demographicData, "Location", "state")
+demographicData$fips <- fips(demographicData$state)
+# drop Puerto Rico, and "National" data 
+demographicData <- demographicData[!is.na(fips)]
 
 #### ---------------------------------------------
 ###   Merge The Covariate Datasets 
