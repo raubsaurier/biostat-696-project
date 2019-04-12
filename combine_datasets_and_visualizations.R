@@ -146,8 +146,18 @@ cor(corrVars)
 # AQI tends to be negatively correlated with smoking rate, % white and obesity rate 
 # AQI appears to be positively correlated with % black 
 
-## load in the 2016 Child Asthma Prevalence Data 
+#### ---------------------------------------------
+###   one last dataset - we should attach the lat/long coordinates that correspond to the centroids of each state 
+#### ---------------------------------------------
 
+centroidData <- data.table(read.csv("us_centroids_for_kriging.csv"))
+centroidData$fips <- fips(centroidData$state)
+
+totalData <- merge(totalData,centroidData, by=c("state", "fips"))
+
+#### ---------------------------------------------
+## load in the 2016 Child Asthma Prevalence Data 
+#### ---------------------------------------------
 asthma2016 <- data.table(read.csv("2016 Asthma Prevalence Complete.csv"))
 ## we notice right away that some states are missing from the 2016 CDC prevalence estimates 
 setnames(asthma2016, c("Location", "total_count"), c("state", "asthma_count"))
@@ -156,7 +166,7 @@ setnames(asthma2016, c("Location", "total_count"), c("state", "asthma_count"))
 asthma2016$fips <- fips(asthma2016$state)
 
 ## Merge asthma data with covariates
-asthma_data = merge(asthma2016, totalData, by = "fips")
+asthma_data = merge(asthma2016, totalData, by = "fips", all.y=TRUE) ## set all.y = TRUE so that we can krige for the missing states
 asthma_data = asthma_data[,c("fips", "state.x", "stateID", "total_population", "asthma_count",
                              "pct_obesity", "obesity_95_lb", "obesity_95_ub", 
                              "pct_daily_smokers", "meanAQI", "log_mean_AQI", "pct_black", "pct_white")]
