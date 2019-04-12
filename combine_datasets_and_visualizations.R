@@ -102,16 +102,25 @@ plot_usmap(data =aggregatedObesity, values = "pct_obesity", lines = "black") +
 ###   Race/Ethnicity Data 
 #### ---------------------------------------------
 
+
+## 2016 population demographic data for US states 
 demographicData <- data.table(read_xlsx("race_ethnicity_data.xlsx"))
 colnames(demographicData) <- as.character(demographicData[1,])
 demographicData <- demographicData[-1,]
 #don't need this column, as it is empty anyway 
 demographicData$Footnotes <- NULL
+## Research shows that African-American children have the highest prevalence of asthma 
+demographicData$pct_white <- as.numeric(demographicData$White)/as.numeric(demographicData$Total)
+# montana doesn't have data on # of black residents 
+demographicData$pct_black <- as.numeric(demographicData$Black)/as.numeric(demographicData$Total)
+
 
 setnames(demographicData, "Location", "state")
 demographicData$fips <- fips(demographicData$state)
 # drop Puerto Rico, and "National" data 
 demographicData <- demographicData[!is.na(fips)]
+
+finalDemoData <- demographicData[,c("fips", "pct_white", "pct_black")]
 
 #### ---------------------------------------------
 ###   Merge The Covariate Datasets 
@@ -120,15 +129,22 @@ demographicData <- demographicData[!is.na(fips)]
 ozoneData <- aggregatedAirData[Defining.Parameter=="Ozone"]
 totalData <- merge(aggregatedObesity, smoking2016, by="fips")
 totalData <- merge(totalData, ozoneData, by="fips")
+totalData <- merge(totalData, finalDemoData, by="fips")
 
 
 ## check for correlations 
 
-corrVars <- totalData[,c("pct_obesity", "pct_daily_smokers", "log_mean_AQI")]
+## since Montana doesn't have known black population, remove it from the dataset in order to be able to compute correlations
+
+corrData <- totalData[fips!=30]
+
+corrVars <- corrData[,c("pct_obesity", "pct_daily_smokers", "log_mean_AQI", "pct_black", "pct_white")]
 cor(corrVars)
 
 ## the results show that smoking and obesity rates appear to be positively correlated
-#whereas AQI tends to be negatively correlated with smoking rate and obesity rate 
+## both % black and % white are positively correlated with obesity
+# AQI tends to be negatively correlated with smoking rate, % white and obesity rate 
+# AQI appears to be positively correlated with % black 
 
 ## load in the 2016 Child Asthma Prevalence Data 
 
@@ -143,7 +159,7 @@ asthma2016$fips <- fips(asthma2016$state)
 asthma_data = merge(asthma2016, totalData, by = "fips")
 asthma_data = asthma_data[,c("fips", "state.x", "stateID", "total_population", "asthma_count",
                              "pct_obesity", "obesity_95_lb", "obesity_95_ub", 
-                             "pct_daily_smokers", "meanAQI", "log_mean_AQI")]
+                             "pct_daily_smokers", "meanAQI", "log_mean_AQI", "pct_black", "pct_white")]
 setnames(asthma_data, c("state.x"), c("state"))
 asthma_data$asthma_count = as.numeric(gsub(",", "", asthma_data$asthma_count, fixed = TRUE))
 
