@@ -4,6 +4,18 @@
 
 ## load libraries
 rm(list=ls())
+library(data.table)
+library(readxl)
+library(RColorBrewer)
+library(classInt)
+library(geoR)
+library(spBayes)
+library(fields)
+library(MBA)
+library(akima)
+library(ggplot2)
+library(usmap)
+library(colorRamps)
 
 ## set working directory
 # setwd("~/repos/biostat-696-project")
