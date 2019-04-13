@@ -57,6 +57,26 @@ for (k in 1:length(pollute_types)){
 ## however, for ozone, we have data for all 50 states 
 ## also, it has been established that asthma can be triggered by ozone, so moving forward, we will proceed with ozone only analysis
 
+#### 4/13/2019 update: create a variable that indicates Ozone vs. other type of pollution in order to avoid confounding in the model 
+
+get_pollution_type <- function(pollution){
+  x <- "Other"
+  if(pollution=="Ozone"){
+    x <- "Ozone"
+  } else { 
+    x <- x 
+  }
+  return(x)
+}
+
+aggregatedAirData$pollution_type <- mapply(get_pollution_type, aggregatedAirData$Defining.Parameter)
+aggregatedAirData <- aggregatedAirData[,c("year", "fips", "pollution_type", "meanAQI")]
+aggregatedAirData <- aggregatedAirData[,list(meanAQI=sum(na.omit(meanAQI))), by=c("year", "fips", "pollution_type")]
+
+reshapedData <- reshape(aggregatedAirData, idvar = c("year", "fips"), timevar = "pollution_type", 
+                        direction="wide")
+
+
 #### ---------------------------------------------
 ###   2016 % of Adults who report smoking daily 
 #### ---------------------------------------------
@@ -126,7 +146,7 @@ finalDemoData <- demographicData[,c("fips", "pct_white", "pct_black")]
 ###   Merge The Covariate Datasets 
 #### ---------------------------------------------
 
-ozoneData <- aggregatedAirData[Defining.Parameter=="Ozone"]
+ozoneData <- copy(reshapedData)
 totalData <- merge(aggregatedObesity, smoking2016, by="fips")
 totalData <- merge(totalData, ozoneData, by="fips")
 totalData <- merge(totalData, finalDemoData, by="fips")
@@ -169,8 +189,8 @@ asthma2016$fips <- fips(asthma2016$state)
 asthma_data = merge(asthma2016, totalData, by = "fips", all.y=TRUE) ## set all.y = TRUE so that we can krige for the missing states
 asthma_data = asthma_data[,c("fips", "state.x", "stateID", "total_population", "asthma_count",
                              "pct_obesity", "obesity_95_lb", "obesity_95_ub", 
-                             "pct_daily_smokers", "meanAQI", "log_mean_AQI", "pct_black", "pct_white")]
+                             "pct_daily_smokers", "meanAQI.Ozone", "meanAQI.Other", "pct_black", "pct_white")]
 setnames(asthma_data, c("state.x"), c("state"))
 asthma_data$asthma_count = as.numeric(gsub(",", "", asthma_data$asthma_count, fixed = TRUE))
 
-write.csv(asthma_data, "2016Asthma_Final.csv", row.names = FALSE)
+write.csv(asthma_data, "2016Asthma_Final_w_KrigingParams.csv", row.names = FALSE)

@@ -29,6 +29,12 @@ loglinear_model = glm(asthma_count ~ offset(log(total_population)) + pct_obesity
                      family = "poisson", data = asthma)
 summary(loglinear_model)
 
+## save the residuals 
+loglinResids <- residuals(loglinear_model)
+
+## test moran's I: 
+
+
 logistic_model = glm(cbind(asthma_count, total_population - asthma_count) ~ pct_obesity + pct_daily_smokers + log_mean_AQI,
                      family = "binomial", data = asthma)
 summary(logistic_model)
