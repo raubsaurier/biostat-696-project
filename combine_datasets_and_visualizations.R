@@ -107,6 +107,7 @@ obesity2016 <- data.table(read_xlsx("childhood_obesity_2016_2017.xlsx"))
 obesity2016 <- obesity2016[!State%in%c("Alaska", "Hawaii")]
 ## make a visualization of this data 
 obesity2016$fips <- fips(obesity2016$State)
+obesity2016$State <- NULL
 
 plot_usmap(data =obesity2016, values = "obesity_rate_2016", lines = "black") + 
   scale_fill_gradientn(colours=blue2red(10), name="Obesity Rate (in %)") +
@@ -141,7 +142,7 @@ finalDemoData <- demographicData[,c("fips", "pct_white", "pct_black")]
 #### ---------------------------------------------
 
 ozoneData <- copy(reshapedData)
-totalData <- merge(aggregatedObesity, smoking2016, by="fips")
+totalData <- merge(obesity2016, smoking2016, by="fips")
 totalData <- merge(totalData, ozoneData, by="fips")
 totalData <- merge(totalData, finalDemoData, by="fips")
 
@@ -152,13 +153,13 @@ totalData <- merge(totalData, finalDemoData, by="fips")
 
 corrData <- totalData[fips!=30]
 
-corrVars <- corrData[,c("pct_obesity", "pct_daily_smokers", "log_mean_AQI", "pct_black", "pct_white")]
+corrVars <- corrData[,c("obesity_rate_2016", "pct_daily_smokers", "meanAQI.Ozone", "pct_black", "pct_white")]
 cor(corrVars)
 
 ## the results show that smoking and obesity rates appear to be positively correlated
 ## both % black and % white are positively correlated with obesity
-# AQI tends to be negatively correlated with smoking rate, % white and obesity rate 
-# AQI appears to be positively correlated with % black 
+# AQI tends to be negatively correlated with smoking rate and  % white
+# AQI appears to be positively correlated with % black and obesity rate 
 
 #### ---------------------------------------------
 ###   one last dataset - we should attach the lat/long coordinates that correspond to the centroids of each state 
@@ -181,8 +182,7 @@ asthma2016$fips <- fips(asthma2016$state)
 
 ## Merge asthma data with covariates
 asthma_data = merge(asthma2016, totalData, by = "fips", all.y=TRUE) ## set all.y = TRUE so that we can krige for the missing states
-asthma_data = asthma_data[,c("fips", "state.x", "stateID", "total_population", "asthma_count",
-                             "pct_obesity", "obesity_95_lb", "obesity_95_ub", 
+asthma_data = asthma_data[,c("fips", "state.x", "total_population", "asthma_count", "obesity_rate_2016", "obesity_rate_2017",
                              "pct_daily_smokers", "meanAQI.Ozone", "meanAQI.Other", "pct_black", "pct_white", "lat", "long")]
 setnames(asthma_data, c("state.x"), c("state"))
 asthma_data$asthma_count = as.numeric(gsub(",", "", asthma_data$asthma_count, fixed = TRUE))
