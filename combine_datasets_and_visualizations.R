@@ -99,25 +99,19 @@ plot_usmap(data =smoking2016, values = "pct_daily_smokers", lines = "black") +
 
 
 #### ---------------------------------------------
-###   2016 % of Adults who are Obese 
+###   2016 % of Children who are obese 
 #### ---------------------------------------------
 
-obesity2016 <- data.table(read.csv("adult_obesity_2016.csv"))
-setnames(obesity2016, c("Data_Value", "LocationAbbr","Low_Confidence_Limit","High_Confidence_Limit"), 
-         c("pct_obesity", "stateID", "obesity_95_lb", "obesity_95_ub"))
+obesity2016 <- data.table(read_xlsx("childhood_obesity_2016_2017.xlsx"))
 
-## subset based on the values we want 
-aggregatedObesity <-  obesity2016[,c("stateID","pct_obesity", "YearStart", "obesity_95_lb", "obesity_95_ub")]
-
-aggregatedObesity <- aggregatedObesity[!stateID%in%c("US", "AK", "HI")]
-
+obesity2016 <- obesity2016[!State%in%c("Alaska", "Hawaii")]
 ## make a visualization of this data 
-aggregatedObesity$fips <- fips(aggregatedObesity$stateID)
+obesity2016$fips <- fips(obesity2016$State)
 
-plot_usmap(data =aggregatedObesity, values = "pct_obesity", lines = "black") + 
+plot_usmap(data =obesity2016, values = "obesity_rate_2016", lines = "black") + 
   scale_fill_gradientn(colours=blue2red(10), name="Obesity Rate (in %)") +
   theme(legend.position = "right") + 
-  labs(title="2016 Adult Obesity Rate by State")
+  labs(title="2016 Child Obesity Rate by State")
 #### ---------------------------------------------
 ###   Race/Ethnicity Data 
 #### ---------------------------------------------
@@ -189,7 +183,7 @@ asthma2016$fips <- fips(asthma2016$state)
 asthma_data = merge(asthma2016, totalData, by = "fips", all.y=TRUE) ## set all.y = TRUE so that we can krige for the missing states
 asthma_data = asthma_data[,c("fips", "state.x", "stateID", "total_population", "asthma_count",
                              "pct_obesity", "obesity_95_lb", "obesity_95_ub", 
-                             "pct_daily_smokers", "meanAQI.Ozone", "meanAQI.Other", "pct_black", "pct_white")]
+                             "pct_daily_smokers", "meanAQI.Ozone", "meanAQI.Other", "pct_black", "pct_white", "lat", "long")]
 setnames(asthma_data, c("state.x"), c("state"))
 asthma_data$asthma_count = as.numeric(gsub(",", "", asthma_data$asthma_count, fixed = TRUE))
 
