@@ -111,7 +111,7 @@ tau2.init <- exp.variog$psill[1]  #we want to include a nugget effect
 asthma_model <- asthma_with_coords[,c("total_population","asthma_count", "obesity_rate_2016", 
                                       "pct_daily_smokers", "meanAQI.Ozone", "meanAQI.Other", "pct_black", "lat", "long")]
 
-asthma_subset <- asthma_model[!is.na(asthma_model$asthma_count)&!is.na(asthma_model$pct_black)]
+asthma_subset <- asthma_model[!is.na(asthma_model$asthma_count)]
 coords <- as.matrix(cbind(asthma_subset$lat, asthma_subset$long)) 
 
 
@@ -139,7 +139,7 @@ br.reml
 #### ---------------------------------------------
 # first we will use the above model to make predictions on the last 20 observations
 # get the last 20 observations of the BR price data 
-asthma_pred <- asthma_model[is.na(asthma_model$asthma_count)&!is.na(asthma_model$pct_black)]
+asthma_pred <- asthma_model[is.na(asthma_model$asthma_count)]
 
 # the locations of the observations we want to predict on 
 lat0 <- asthma_pred$lat
@@ -155,17 +155,16 @@ tau2.pred <- br.reml$tausq
 
 # set up the model for prediction 
 set.seed(03012019)
-kc.ok.control <- krige.control(type.krige="ok",trend.d = obesity_rate_2016 + pct_daily_smokers + meanAQI.Ozone + meanAQI.Other + pct_black
-                               , obj.model = br.reml,
-                              trend.l =  asthma_pred$obesity_rate_2016 + asthma_pred$pct_daily_smokers + asthma_pred$meanAQI.Ozone + asthma_pred$meanAQI.Other +asthma_pred$pct_black,
+kc.ok.control <- krige.control(type.krige="ok",trend.d =asthma_count ~ obesity_rate_2016 + pct_daily_smokers + meanAQI.Ozone + meanAQI.Other + pct_black, 
+                              obj.model = br.reml,
+                              trend.l =  asthma_pred$asthma_count ~ asthma_pred$obesity_rate_2016 + asthma_pred$pct_daily_smokers + asthma_pred$meanAQI.Ozone + asthma_pred$meanAQI.Other +asthma_pred$pct_black,
                               cov.model="exponential", 
                               cov.pars=c(sigma2.pred,phi.pred),nugget=tau2.pred)
 
 
-loc.ok <- matrix(c(lat0,long0),nrow=18,ncol=2)
+loc.ok <- matrix(c(lat0,long0), ncol=2)
 kc.ok.s0 <- krige.conv(br.geo,locations=loc.ok,krige=kc.ok.control)
-
-pred_prices <- kc.ok.s0$predict
+pred_asthma_counts <- kc.ok.s0$predict
 
 #### ---------------------------------------------
 ##### Bayesian hierarchical model w/ spatial effects: 
@@ -193,6 +192,33 @@ asthmaBayes <- spGLM(asthma_count ~obesity_rate_2016 + pct_daily_smokers + meanA
 par(mai=rep(0.5,4))
 plot(asthmaBayes$p.beta.theta.samples)
 
+
+#### ---------------------------------------------
+## Bayesian predictions 
+#### ---------------------------------------------
+
+n.pred <- 18
+pred_coords <- as.matrix(cbind(asthma_pred$lat, asthma_pred$long)) 
+# the variables for the 18 sites 
+asthma.predcov <- matrix(cbind(rep(1, n.pred), asthma_pred$obesity_rate_2016,  asthma_pred$pct_daily_smokers, asthma_pred$meanAQI.Ozone, asthma_pred$meanAQI.Other, 
+                               asthma_pred$pct_black),nrow=n.pred,ncol=6)
+
+# get the predictions at the 20 selected sites
+set.seed(03012019)
+bayesian_pred <- spPredict(asthmaBayes, pred.coords=coords, pred.covars=asthma.predcov, start=burn.in, verbose = FALSE, n.report=5000)
+
+## posterior mean of the predictions 
+post.pred.mean <- rowMeans(bayesian_pred$p.y.predictive.samples)
+post.pred.mean[1:n.pred]
+
+## posterior medians 
+post.pred.median <- apply(bayesian_pred$p.y.predictive.samples,1,median)
+post.pred.median[1:n.pred]
+
+
+## 90% posterior predictive intervals 
+post.pred.90ci <- apply(bayesian_pred$p.y.predictive.samples,1,quantile,c(0.05,0.95))
+post.pred.90ci[,1:n.pred]
 
 
 
