@@ -30,10 +30,7 @@ loglinear_model = glm(asthma_count ~ offset(log(total_population)) + pct_obesity
                      family = "poisson", data = asthma)
 summary(loglinear_model)
 
-## save the residuals 
-loglinResids <- residuals(loglinear_model)
-
-## test moran's I: 
+# logistic regression model
 
 
 logistic_model = glm(cbind(asthma_count, total_population - asthma_count) ~ pct_obesity + pct_daily_smokers + log_mean_AQI,
@@ -45,6 +42,9 @@ summary(logistic_model)
 #### ---------------------------------------------
 
 asthma_with_coords = data.table(read.csv("2016Asthma_Final_w_KrigingParams.csv"))
+
+## fill in Montana's % black with 2017 data 
+asthma_with_coords[fips==30]$pct_black <- 0.01
 
 ## convert lat & long for semi variogram: 
 
@@ -74,8 +74,8 @@ summary(loglinear_model)
 ## save the residuals 
 loglinResids <- residuals(loglinear_model)
 # since we do not have asthma data for some states, make sure to only get the coordinates for the 
-x.dist <- asthma_with_coords[!is.na(asthma_with_coords$state)&!is.na(asthma_with_coords$pct_black)]$x.dist/1000
-y.dist <- asthma_with_coords[!is.na(asthma_with_coords$state)&!is.na(asthma_with_coords$pct_black)]$y.dist/1000
+x.dist <- asthma_with_coords[!is.na(asthma_with_coords$state)&!is.na(asthma_with_coords$pct_black)]$x.dist
+y.dist <- asthma_with_coords[!is.na(asthma_with_coords$state)&!is.na(asthma_with_coords$pct_black)]$y.dist
 
 
 residData <- data.table(cbind(x.dist, y.dist, loglinResids))
@@ -91,7 +91,7 @@ plot(emp.variog, main="Empirical Semi-Variogram of the Log-Linear Residuals")
 
 
 # fit an exponential variogram 
-exp.variog <- fit.variogram(emp.variog,vgm(psill=800, nugget=1500, "Exp"),fit.method=2)
+exp.variog <- fit.variogram(emp.variog,vgm(psill=800, nugget=1000, "Exp"),fit.method=2)
 exp.variog
 # make a plot of the empirical semi-variogram with the exponential semi-variogram overlayed 
 print(plot(emp.variog,exp.variog, main="Exponential Semi-Variogram"))
@@ -99,7 +99,7 @@ print(plot(emp.variog,exp.variog, main="Exponential Semi-Variogram"))
 
 ## specify the initial values for the parameters 
 beta.init <- loglinear_model$coefficients# use the estimates of beta from our loglinear GLM model
-sigma2.init <- exp.variog$psill[2] + 0.0001 # since this is 0, add a very small value so that the REML model can run 
+sigma2.init <- exp.variog$psill[2] 
 phi.init <- 1/exp.variog$range[2] # range 
 tau2.init <- exp.variog$psill[1]  #we want to include a nugget effect
 
@@ -108,8 +108,8 @@ tau2.init <- exp.variog$psill[1]  #we want to include a nugget effect
 #### ---------------------------------------------
 
 
-asthma_model <- asthma_with_coords[,c("total_population","asthma_count", "obesity_rate_2016", 
-                                      "pct_daily_smokers", "meanAQI.Ozone", "meanAQI.Other", "pct_black", "lat", "long")]
+asthma_model <- asthma_with_coords[,c("asthma_count", "obesity_rate_2016", 
+                                      "pct_daily_smokers", "meanAQI.Ozone", "meanAQI.Other", "pct_black", "lat", "long", "total_population")]
 
 asthma_subset <- asthma_model[!is.na(asthma_model$asthma_count)]
 coords <- as.matrix(cbind(asthma_subset$lat, asthma_subset$long)) 
@@ -125,20 +125,19 @@ pct_black <- asthma_subset$pct_black
 total_population <- asthma_subset$total_population
 
 
-br.geo <- as.geodata(asthma_subset,coords.col=c(8,9), data.col = 2, covar.col = c(3,4,5,6,7))
+br.geo <- as.geodata(asthma_subset,coords.col=c(7,8), data.col = 1, covar.col = c(2,3,4,5,6))
 
 ## fit the model 
 set.seed(04122019)
-br.reml <- likfit(geodata=br.geo, trend= asthma_count ~obesity_rate_2016 + pct_daily_smokers + meanAQI.Ozone + meanAQI.Other + pct_black,
+br.reml <- likfit(geodata=br.geo, trend= log(asthma_count) ~obesity_rate_2016 + pct_daily_smokers + meanAQI.Ozone + meanAQI.Other + pct_black,
                   cov.model="exponential",ini=c(sigma2.init, phi.init), nugget=tau2.init, lik.met="REML")
 br.reml
 
 
 #### ---------------------------------------------
 ##### making predictions with the data 
-#### ---------------------------------------------
-# first we will use the above model to make predictions on the last 20 observations
-# get the last 20 observations of the BR price data 
+#### --------------------------------------------
+# we would like to predict asthma rates for the states without asthma data 
 asthma_pred <- asthma_model[is.na(asthma_model$asthma_count)]
 
 # the locations of the observations we want to predict on 
@@ -172,7 +171,7 @@ pred_asthma_counts <- kc.ok.s0$predict
 
 
 ## set up the model 
-n.batch <- 2000
+n.batch <- 200000
 batch.length <- 100
 n.samples = n.batch*batch.length
 burn.in <- 0.5*n.samples
@@ -180,17 +179,23 @@ burn.in <- 0.5*n.samples
 # for reproducibility
 set.seed(20190301)
 ## fit a Bayesian GLM 
-## not sure if I set the weights correctly, feel free to change!! 
 asthmaBayes <- spGLM(asthma_count ~obesity_rate_2016 + pct_daily_smokers + meanAQI.Ozone + meanAQI.Other + pct_black
                  , weights = total_population, family="poisson", 
                  coords=coords,starting=list("phi"=phi.init,"sigma.sq"=sigma2.init, "tau.sq"=tau2.init,"beta"=beta.init, "w"=0),
-                 tuning=list("phi"=0.000001, "sigma.sq"=0.00005, "tau.sq"=0.0001, beta=c(rep(0.00001, length(beta.init))), "w"=0.0001), #tried several different values of the tuning to make the trace plots look nicer 
-                 priors=list("phi.Unif"=c(1, 10), "sigma.sq.IG"=c(2, 1),
-                             "tau.sq.IG"=c(3, 1),"beta.Flat"), cov.model="gaussian",n.samples=n.samples, verbose=TRUE, n.report=0.2*n.samples)
+                 tuning=list("phi"=0.00001, "sigma.sq"=0.00001, "tau.sq"=0.00001, beta=c(rep(0.001, length(beta.init))), "w"=0.00001), #tried several different values of the tuning to make the trace plots look nicer 
+                 priors=list("phi.Unif"=c(0.003, 0.1), "sigma.sq.IG"=c(2, 1),
+                             "tau.sq.IG"=c(2, 1),"beta.Flat"), cov.model="exponential",n.samples=n.samples, verbose=TRUE, n.report=0.2*n.samples)
 
 ## Trace plots of the parameters
 par(mai=rep(0.5,4))
 plot(asthmaBayes$p.beta.theta.samples)
+
+### diagnostics for convergence
+
+samps <- mcmc.list(asthmaBayes$p.beta.theta.samples)
+heidel.diag(samps, eps=0.1, pvalue=0.05)
+
+
 
 
 #### ---------------------------------------------
