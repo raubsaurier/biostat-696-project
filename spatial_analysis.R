@@ -23,28 +23,51 @@ library(gstat)
 # setwd("~/Documents/BIOSTATS 696 - Spatial Data Analysis/biostat-696-project")
 
 ## Read in the data
-asthma = read.csv("2016Asthma_Final.csv")
+asthma_with_coords = data.table(read.csv("2016Asthma_Final_w_KrigingParams.csv"))
 
 ## run initial (non-spatial) GLM
-loglinear_model = glm(asthma_count ~ offset(log(total_population)) + pct_obesity + pct_daily_smokers + log_mean_AQI,
-                     family = "poisson", data = asthma)
+loglinear_model = glm(asthma_count ~ offset(log(total_population)) + 
+                        obesity_rate_2016 + pct_daily_smokers + meanAQI.Ozone,
+                     family = "poisson", data = asthma_with_coords)
 summary(loglinear_model)
 
-## save the residuals 
-loglinResids <- residuals(loglinear_model)
-
+####-----------------------------
 ## test moran's I: 
+####-----------------------------
+# create spatial polygon of US
+US = map("state",fill=TRUE,plot=FALSE)
+US.poly = map2SpatialPolygons(US,IDs=sapply(strsplit(US$names,":"),function(x) x[1]),
+                                  proj4string=CRS("+proj=longlat + datum=wgs84"))
+US.poly = US.poly[-8]
+US.nb = poly2nb(US.poly)
+US.weights = nb2WB(US.nb)
+US.list.w = nb2listw(US.nb)
 
+# compute Moran's I for percentage with asthma
+moran.test(asthma_with_coords$asthma_count / asthma_with_coords$total_population, 
+           listw = US.list.w, randomisation=FALSE, na.action = na.omit, zero.policy = TRUE)
+  # prior to kriging there are missing values in the data
+  # we must exclude these values (na.omit) but this can cause problems if there are no neighbors
+  # per function documentation, set zero.policy = TRUE, which sets 0 to lagged value of zones without neighbors
 
-logistic_model = glm(cbind(asthma_count, total_population - asthma_count) ~ pct_obesity + pct_daily_smokers + log_mean_AQI,
-                     family = "binomial", data = asthma)
-summary(logistic_model)
+  # Moran's I value is 2.416 with corresponding pvalue = .008 which is significant at a 0.05 significance level, 
+  # indicating that we reject the null hypothesis and conclude that there is spatial autocorrelation in the 
+  # percentage of children in the population who have asthma between states
+
+# compute Moran's I for residuals of loglinear model
+loglinResids <- as.data.frame(residuals(loglinear_model))
+loglinResids$state = asthma_with_coords$state[as.numeric(rownames(loglinResids))]
+asthma_with_resid = merge(asthma_with_coords, loglinResids, by = "state", all.x = TRUE)
+asthma_with_resid = asthma_with_resid[order(asthma_with_resid$fips),]
+moran.test(asthma_with_resid$`residuals(loglinear_model)`,
+           listw = US.list.w, randomisation=FALSE, na.action = na.omit, zero.policy = TRUE)
+  # Moran's I value is 2.254 with corresponding pvalue = .012 which is significant at a 0.05 significance level, 
+  # indicating that we reject the null hypothesis and conclude that there is spatial autocorrelation in the 
+  # residuals of the number of children in the population who have asthma between states
 
 #### ---------------------------------------------
 ##### Use kriging on centroid lat/long coordinates: 
 #### ---------------------------------------------
-
-asthma_with_coords = data.table(read.csv("2016Asthma_Final_w_KrigingParams.csv"))
 
 ## convert lat & long for semi variogram: 
 
