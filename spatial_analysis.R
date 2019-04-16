@@ -17,25 +17,104 @@ library(ggplot2)
 library(usmap)
 library(colorRamps)
 library(gstat)
+library(CARBayes)
+library(maptools)
+library(spdep)
+library(dplyr)
 
 ## set working directory
 # setwd("~/repos/biostat-696-project")
 # setwd("~/Documents/BIOSTATS 696 - Spatial Data Analysis/biostat-696-project")
 
 ## Read in the data
-asthma = read.csv("2016Asthma_Final.csv")
+asthma_with_coords = data.table(read.csv("2016Asthma_Final_w_KrigingParams.csv"))
+
+asthma_with_coords$state = as.character(asthma_with_coords$state)
+asthma_with_coords$state[is.na(asthma_with_coords$state)] = fips_info(asthma_with_coords$fips[is.na(asthma_with_coords$state)])$full
+
+population = read.csv("Child population by age group.csv")
+
+population = population %>%
+  filter(Location != "United States" &
+           TimeFrame == 2016 &
+           Age.group == "Total less than 18" &
+           DataFormat == "Number") %>%
+  select(Location, Data) %>%
+  rename(total_population = Data)
+
+asthma_with_coords = merge(asthma_with_coords, population, by.x = "state", by.y = "Location") %>%
+  select(-total_population.x)
 
 ## run initial (non-spatial) GLM
-loglinear_model = glm(asthma_count ~ offset(log(total_population)) + pct_obesity + pct_daily_smokers + log_mean_AQI,
-                     family = "poisson", data = asthma)
+loglinear_model = glm(asthma_count ~ offset(log(total_population)) + 
+                        obesity_rate_2016 + pct_daily_smokers + meanAQI.Ozone,
+                     family = "poisson", data = asthma_with_coords)
 summary(loglinear_model)
 
 # logistic regression model
+####-----------------------------
+## test moran's I: 
+####-----------------------------
+# create spatial polygon of US
+US = map("state",fill=TRUE,plot=FALSE)
+US.poly = map2SpatialPolygons(US,IDs=sapply(strsplit(US$names,":"),function(x) x[1]),
+                                  proj4string=CRS("+proj=longlat + datum=wgs84"))
+US.poly = US.poly[-8]
+US.nb = poly2nb(US.poly)
+US.weights = nb2WB(US.nb)
+US.list.w = nb2listw(US.nb)
 
+# compute Moran's I for percentage with asthma
+moran.test(asthma_with_coords$asthma_count / asthma_with_coords$total_population, 
+           listw = US.list.w, randomisation=FALSE, na.action = na.omit, zero.policy = TRUE)
+  # prior to kriging there are missing values in the data
+  # we must exclude these values (na.omit) but this can cause problems if there are no neighbors
+  # per function documentation, set zero.policy = TRUE, which sets 0 to lagged value of zones without neighbors
 
-logistic_model = glm(cbind(asthma_count, total_population - asthma_count) ~ pct_obesity + pct_daily_smokers + log_mean_AQI,
-                     family = "binomial", data = asthma)
-summary(logistic_model)
+  # Moran's I value is 2.416 with corresponding pvalue = .008 which is significant at a 0.05 significance level, 
+  # indicating that we reject the null hypothesis and conclude that there is spatial autocorrelation in the 
+  # percentage of children in the population who have asthma between states
+
+# compute Moran's I for residuals of loglinear model
+loglinResids <- as.data.frame(residuals(loglinear_model))
+loglinResids$state = asthma_with_coords$state[as.numeric(rownames(loglinResids))]
+asthma_with_resid = merge(asthma_with_coords, loglinResids, by = "state", all.x = TRUE)
+asthma_with_resid = asthma_with_resid[order(asthma_with_resid$fips),]
+moran.test(asthma_with_resid$`residuals(loglinear_model)`,
+           listw = US.list.w, randomisation=FALSE, na.action = na.omit, zero.policy = TRUE)
+  # Moran's I value is 2.254 with corresponding pvalue = .012 which is significant at a 0.05 significance level, 
+  # indicating that we reject the null hypothesis and conclude that there is spatial autocorrelation in the 
+  # residuals of the number of children in the population who have asthma between states
+
+###----------------------------------------------
+##### Disease mapping of asthma (without kriging values)
+###----------------------------------------------
+set.seed(696)
+
+adj.US = US.weights$adj
+rep.US = rep(1:nrow(asthma_with_coords),US.weights$num)
+W = matrix(0, nrow(asthma_with_coords), nrow(asthma_with_coords))
+for (i in 1:nrow(asthma_with_coords)) {
+  W[i, adj.US[rep.US == i]] = rep(1, US.weights$num[i])
+}
+>>>>>>> 17a46d151c270284cde44190cc89cab1de7cd69f
+
+disease_map = S.CARleroux(formula = asthma_with_coords$asthma_count ~ 
+                            offset(log(asthma_with_coords$total_population)) + 
+                            asthma_with_coords$obesity_rate_2016 + asthma_with_coords$pct_daily_smokers + asthma_with_coords$meanAQI.Ozone,
+                          W=W,
+                          family = "poisson",
+                          rho = 1,
+                          burnin = 500,
+                          n.sample = 2000,
+                          thin = 1,
+                          prior.mean.beta = NULL,
+                          prior.var.beta = NULL,
+                          prior.nu2 = NULL,
+                          prior.tau2 = NULL,
+                          verbose = TRUE)
+
+disease_map$summary.results
 
 #### ---------------------------------------------
 ##### Use kriging on centroid lat/long coordinates: 
