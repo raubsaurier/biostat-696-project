@@ -17,6 +17,7 @@ library(ggplot2)
 library(usmap)
 library(colorRamps)
 library(gstat)
+library(CARBayes)
 
 ## set working directory
 # setwd("~/repos/biostat-696-project")
@@ -64,6 +65,40 @@ moran.test(asthma_with_resid$`residuals(loglinear_model)`,
   # Moran's I value is 2.254 with corresponding pvalue = .012 which is significant at a 0.05 significance level, 
   # indicating that we reject the null hypothesis and conclude that there is spatial autocorrelation in the 
   # residuals of the number of children in the population who have asthma between states
+
+###----------------------------------------------
+##### Disease mapping of asthma (without kriging values)
+###----------------------------------------------
+set.seed(696)
+
+adj.US = US.weights$adj
+rep.US = rep(1:nrow(asthma_with_coords),US.weights$num)
+W = matrix(0, nrow(asthma_with_coords), nrow(asthma_with_coords))
+for (i in 1:nrow(asthma_with_coords)) {
+  W[i, adj.US[rep.US == i]] = rep(1, US.weights$num[i])
+}
+W = W[-which(is.na(asthma_with_coords$state)), -which(is.na(asthma_with_coords$state))]
+
+asthma_with_coords$state = as.character(asthma_with_coords$state)
+asthma_with_coords$state[is.na(asthma_with_coords$state)] = fips_info(rownames(asthma_with_coords)[is.na(asthma_with_coords$state)])$full
+
+asthma_sub = asthma_with_coords[-which(is.na(asthma_with_coords$state)),]
+disease_map = S.CARleroux(formula = asthma_sub$asthma_count ~ 
+                            offset(log(asthma_sub$total_population)) + 
+                            asthma_sub$obesity_rate_2016 + asthma_sub$pct_daily_smokers + asthma_sub$meanAQI.Ozone,
+                          W=W,
+                          family = "poisson",
+                          rho = 1,
+                          burnin = 500,
+                          n.sample = 2000,
+                          thin = 1,
+                          prior.mean.beta = NULL,
+                          prior.var.beta = NULL,
+                          prior.nu2 = NULL,
+                          prior.tau2 = NULL,
+                          verbose = TRUE)
+
+disease_map$summary.results
 
 #### ---------------------------------------------
 ##### Use kriging on centroid lat/long coordinates: 
