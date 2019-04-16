@@ -18,6 +18,9 @@ library(usmap)
 library(colorRamps)
 library(gstat)
 library(CARBayes)
+library(maptools)
+library(spdep)
+library(dplyr)
 
 ## set working directory
 # setwd("~/repos/biostat-696-project")
@@ -25,6 +28,22 @@ library(CARBayes)
 
 ## Read in the data
 asthma_with_coords = data.table(read.csv("2016Asthma_Final_w_KrigingParams.csv"))
+
+asthma_with_coords$state = as.character(asthma_with_coords$state)
+asthma_with_coords$state[is.na(asthma_with_coords$state)] = fips_info(asthma_with_coords$fips[is.na(asthma_with_coords$state)])$full
+
+population = read.csv("Child population by age group.csv")
+
+population = population %>%
+  filter(Location != "United States" &
+           TimeFrame == 2016 &
+           Age.group == "Total less than 18" &
+           DataFormat == "Number") %>%
+  select(Location, Data) %>%
+  rename(total_population = Data)
+
+asthma_with_coords = merge(asthma_with_coords, population, by.x = "state", by.y = "Location") %>%
+  select(-total_population.x)
 
 ## run initial (non-spatial) GLM
 loglinear_model = glm(asthma_count ~ offset(log(total_population)) + 
@@ -77,15 +96,10 @@ W = matrix(0, nrow(asthma_with_coords), nrow(asthma_with_coords))
 for (i in 1:nrow(asthma_with_coords)) {
   W[i, adj.US[rep.US == i]] = rep(1, US.weights$num[i])
 }
-W = W[-which(is.na(asthma_with_coords$state)), -which(is.na(asthma_with_coords$state))]
 
-asthma_with_coords$state = as.character(asthma_with_coords$state)
-asthma_with_coords$state[is.na(asthma_with_coords$state)] = fips_info(rownames(asthma_with_coords)[is.na(asthma_with_coords$state)])$full
-
-asthma_sub = asthma_with_coords[-which(is.na(asthma_with_coords$state)),]
-disease_map = S.CARleroux(formula = asthma_sub$asthma_count ~ 
-                            offset(log(asthma_sub$total_population)) + 
-                            asthma_sub$obesity_rate_2016 + asthma_sub$pct_daily_smokers + asthma_sub$meanAQI.Ozone,
+disease_map = S.CARleroux(formula = asthma_with_coords$asthma_count ~ 
+                            offset(log(asthma_with_coords$total_population)) + 
+                            asthma_with_coords$obesity_rate_2016 + asthma_with_coords$pct_daily_smokers + asthma_with_coords$meanAQI.Ozone,
                           W=W,
                           family = "poisson",
                           rho = 1,
