@@ -28,31 +28,6 @@ library(dplyr)
 
 ## Read in the data
 asthma_with_coords = data.table(read.csv("2016Asthma_Final_w_KrigingParams.csv"))
-#### ---------------------------------------------
-## code to add total population to all states! 
-#### ---------------------------------------------
-# asthma_with_coords$total_population <- NULL
-# 
-# asthma_with_coords$state = as.character(asthma_with_coords$state)
-# asthma_with_coords$state[is.na(asthma_with_coords$state)] = fips_info(asthma_with_coords$fips[is.na(asthma_with_coords$state)])$full
-# 
-# population = read.csv("Child population by age group.csv")
-# 
-# population = population %>%
-#   filter(Location != "United States" &
-#            TimeFrame == 2016 &
-#            Age.group == "Total less than 18" &
-#            DataFormat == "Number") %>%
-#   select(Location, Data) %>%
-#   rename(total_population = Data)
-# 
-# 
-# asthma_with_coords = merge(asthma_with_coords, population, by.x = "state", by.y = "Location") %>%
-#   select(-total_population.x)
-# 
-# setnames(asthma_with_coords, "total_population.y", "total_population")
-
-# write.csv(asthma_with_coords, "2016Asthma_Final_w_KrigingParams.csv",row.names=FALSE)
 
 ## run initial (non-spatial) GLM - Poisson regression 
 loglinear_model = glm(asthma_count ~ offset(log(total_population)) + 
@@ -263,7 +238,7 @@ pred_coords <- as.matrix(cbind(lat0, long0))
 
 
 ## set up the model 
-n.batch <- 5000
+n.batch <- 500
 batch.length <- 100
 n.samples = n.batch*batch.length
 burn.in <- 0.5*n.samples

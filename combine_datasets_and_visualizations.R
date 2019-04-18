@@ -185,19 +185,51 @@ asthma2016$asthma_count = as.numeric(gsub(",", "", asthma2016$asthma_count, fixe
 asthma2016$fips <- fips(asthma2016$state)
 
 
+
 plot_usmap(data =asthma2016, values = "asthma_count", lines = "black", labels = TRUE) + 
   scale_fill_gradientn(colours=blue2red(10), name="Asthma Count") +
   theme(legend.position = "right") + 
   labs(title="2016 Child Asthma by State")
+
 #### ---------------------------------------------
 
 
 
 ## Merge asthma data with covariates
 asthma_data = merge(asthma2016, totalData, by = c("state","fips"), all.y=TRUE) ## set all.y = TRUE so that we can krige for the missing states
-asthma_data = asthma_data[,c("fips", "state", "total_child_pop", "asthma_count", "obesity_rate_2016", "obesity_rate_2017",
-                             "pct_daily_smokers", "meanAQI.Ozone", "meanAQI.Other", "pct_black", "pct_white", "lat", "long")]
+asthma_data = asthma_data[,c("fips", "state","asthma_count", "obesity_rate_2016", "obesity_rate_2017",
+                             "pct_daily_smokers", "meanAQI.Ozone", "meanAQI.Other", "meanAQI.PM2.5", "pct_black", "pct_white")]
 #setnames(asthma_data, c("state.x"), c("state"))
 asthma_data$asthma_count = as.numeric(gsub(",", "", asthma_data$asthma_count, fixed = TRUE))
+
+#### ---------------------------------------------
+## code to add total population to all states! 
+#### ---------------------------------------------
+# 
+population = data.table(read.csv("child_population_NUMERIC.csv"))
+population$Data <- as.character(population$Data)
+population$Data <- as.numeric(population$Data)
+
+
+population <- population[Location!="United States"&TimeFrame==2016&Age.group=="Total less than 18"]
+# 
+# population = population %>%
+#   filter(Location != "United States" &
+#            TimeFrame == 2016 &
+#            Age.group == "Total less than 18" &
+#            DataFormat == "Number") %>%
+#   select(Location, Data) %>%
+#   rename(total_population = Data)
+# # 
+population <- population[,c("Location", "Data")]
+setnames(population,c("Location", "Data"), c("state", "total_population"))
+
+# 
+total_asthma = merge(asthma_data, population, by="state")
+
+write.csv(total_asthma , "2016Asthma_Final_w_KrigingParams_PM25.csv",row.names=FALSE)
+
+
+
 
 write.csv(asthma_data, "2016Asthma_Final.csv", row.names = FALSE)
