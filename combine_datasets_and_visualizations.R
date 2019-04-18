@@ -58,23 +58,26 @@ for (k in 1:length(pollute_types)){
 ## also, it has been established that asthma can be triggered by ozone, so moving forward, we will proceed with ozone only analysis
 
 #### 4/13/2019 update: create a variable that indicates Ozone vs. other type of pollution in order to avoid confounding in the model 
-
+### 4/17 - include PM2 to include pollen by proxy 
 get_pollution_type <- function(pollution){
   x <- "Other"
   if(pollution=="Ozone"){
     x <- "Ozone"
-  } else { 
-    x <- x 
+  } else if(pollution=="PM2.5"){ 
+    x <- "PM2.5"
+    } else { 
+      x <- x 
   }
   return(x)
 }
 
 aggregatedAirData$pollution_type <- mapply(get_pollution_type, aggregatedAirData$Defining.Parameter)
-aggregatedAirData <- aggregatedAirData[,c("year", "fips", "pollution_type", "meanAQI")]
-aggregatedAirData <- aggregatedAirData[,list(meanAQI=sum(na.omit(meanAQI))), by=c("year", "fips", "pollution_type")]
+aggregatedAirData <- aggregatedAirData[,c("year", "fips", "pollution_type", "meanAQI", "State.Name")]
+aggregatedAirData <- aggregatedAirData[,list(meanAQI=sum(na.omit(meanAQI))), by=c("State.Name","year", "fips", "pollution_type")]
 
-reshapedData <- reshape(aggregatedAirData, idvar = c("year", "fips"), timevar = "pollution_type", 
+reshapedData <- reshape(aggregatedAirData, idvar = c("year", "State.Name","fips"), timevar = "pollution_type", 
                         direction="wide")
+setnames(reshapedData, "State.Name", "state")
 
 
 #### ---------------------------------------------
@@ -107,7 +110,7 @@ obesity2016 <- data.table(read_xlsx("childhood_obesity_2016_2017.xlsx"))
 obesity2016 <- obesity2016[!State%in%c("Alaska", "Hawaii")]
 ## make a visualization of this data 
 obesity2016$fips <- fips(obesity2016$State)
-obesity2016$State <- NULL
+setnames(obesity2016, "State", "state")
 
 plot_usmap(data =obesity2016, values = "obesity_rate_2016", lines = "black") + 
   scale_fill_gradientn(colours=blue2red(10), name="Obesity Rate (in %)") +
@@ -131,29 +134,29 @@ demographicData$pct_black <- as.numeric(demographicData$Black)/as.numeric(demogr
 
 
 setnames(demographicData, "Location", "state")
+## use 2017 % of black residents for Montana since 2016 data was not available 
+demographicData[state=="Montana"]$pct_black <- 0.01
 demographicData$fips <- fips(demographicData$state)
 # drop Puerto Rico, and "National" data 
 demographicData <- demographicData[!is.na(fips)]
 
-finalDemoData <- demographicData[,c("fips", "pct_white", "pct_black")]
+finalDemoData <- demographicData[,c("fips", "state", "pct_white", "pct_black")]
 
 #### ---------------------------------------------
 ###   Merge The Covariate Datasets 
 #### ---------------------------------------------
 
 ozoneData <- copy(reshapedData)
-totalData <- merge(obesity2016, smoking2016, by="fips")
-totalData <- merge(totalData, ozoneData, by="fips")
-totalData <- merge(totalData, finalDemoData, by="fips")
+totalData <- merge(obesity2016, smoking2016, by=c("fips", "state"))
+totalData <- merge(totalData, ozoneData, by=c("fips", "state"))
+totalData <- merge(totalData, finalDemoData, by=c("fips", "state"))
 
 
 ## check for correlations 
 
-## since Montana doesn't have known black population, remove it from the dataset in order to be able to compute correlations
+## since Montana doesn't have known black population, remove it from the dataset in order to be able to compute correlation
 
-corrData <- totalData[fips!=30]
-
-corrVars <- corrData[,c("obesity_rate_2016", "pct_daily_smokers", "meanAQI.Ozone", "pct_black", "pct_white")]
+corrVars <- totalData[,c("obesity_rate_2016", "pct_daily_smokers", "meanAQI.Ozone", "pct_black", "pct_white")]
 cor(corrVars)
 
 ## the results show that smoking and obesity rates appear to be positively correlated
@@ -165,26 +168,36 @@ cor(corrVars)
 ###   one last dataset - we should attach the lat/long coordinates that correspond to the centroids of each state 
 #### ---------------------------------------------
 
-centroidData <- data.table(read.csv("us_centroids_for_kriging.csv"))
-centroidData$fips <- fips(centroidData$state)
-
-totalData <- merge(totalData,centroidData, by=c("state", "fips"))
+## 4/17 update -=> we don't need to do kriging anymore 
+# centroidData <- data.table(read.csv("us_centroids_for_kriging.csv"))
+# centroidData$fips <- fips(centroidData$state)
+# 
+# totalData <- merge(totalData,centroidData, by=c("state", "fips"))
 
 #### ---------------------------------------------
 ## load in the 2016 Child Asthma Prevalence Data 
 #### ---------------------------------------------
 asthma2016 <- data.table(read.csv("2016 Asthma Prevalence Complete.csv"))
 ## we notice right away that some states are missing from the 2016 CDC prevalence estimates 
-setnames(asthma2016, c("Location", "total_count"), c("state", "asthma_count"))
-
+setnames(asthma2016, c("Location", "total_count", "total_population"), c("state", "asthma_count", "total_child_pop"))
+asthma2016$asthma_count = as.numeric(gsub(",", "", asthma2016$asthma_count, fixed = TRUE))
 ## get fips: 
 asthma2016$fips <- fips(asthma2016$state)
 
+
+plot_usmap(data =asthma2016, values = "asthma_count", lines = "black", labels = TRUE) + 
+  scale_fill_gradientn(colours=blue2red(10), name="Asthma Count") +
+  theme(legend.position = "right") + 
+  labs(title="2016 Child Asthma by State")
+#### ---------------------------------------------
+
+
+
 ## Merge asthma data with covariates
-asthma_data = merge(asthma2016, totalData, by = "fips", all.y=TRUE) ## set all.y = TRUE so that we can krige for the missing states
-asthma_data = asthma_data[,c("fips", "state.x", "total_population", "asthma_count", "obesity_rate_2016", "obesity_rate_2017",
+asthma_data = merge(asthma2016, totalData, by = c("state","fips"), all.y=TRUE) ## set all.y = TRUE so that we can krige for the missing states
+asthma_data = asthma_data[,c("fips", "state", "total_child_pop", "asthma_count", "obesity_rate_2016", "obesity_rate_2017",
                              "pct_daily_smokers", "meanAQI.Ozone", "meanAQI.Other", "pct_black", "pct_white", "lat", "long")]
-setnames(asthma_data, c("state.x"), c("state"))
+#setnames(asthma_data, c("state.x"), c("state"))
 asthma_data$asthma_count = as.numeric(gsub(",", "", asthma_data$asthma_count, fixed = TRUE))
 
-write.csv(asthma_data, "2016Asthma_Final_w_KrigingParams.csv", row.names = FALSE)
+write.csv(asthma_data, "2016Asthma_Final.csv", row.names = FALSE)

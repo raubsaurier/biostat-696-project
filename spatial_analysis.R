@@ -28,29 +28,33 @@ library(dplyr)
 
 ## Read in the data
 asthma_with_coords = data.table(read.csv("2016Asthma_Final_w_KrigingParams.csv"))
-asthma_with_coords$total_population <- NULL
-
-asthma_with_coords$state = as.character(asthma_with_coords$state)
-asthma_with_coords$state[is.na(asthma_with_coords$state)] = fips_info(asthma_with_coords$fips[is.na(asthma_with_coords$state)])$full
-
-population = read.csv("Child population by age group.csv")
-
-population = population %>%
-  filter(Location != "United States" &
-           TimeFrame == 2016 &
-           Age.group == "Total less than 18" &
-           DataFormat == "Number") %>%
-  select(Location, Data) %>%
-  rename(total_population = Data)
-
-
-asthma_with_coords = merge(asthma_with_coords, population, by.x = "state", by.y = "Location") %>%
-  select(-total_population.x)
-
-setnames(asthma_with_coords, "total_population.y", "total_population")
+#### ---------------------------------------------
+## code to add total population to all states! 
+#### ---------------------------------------------
+# asthma_with_coords$total_population <- NULL
+# 
+# asthma_with_coords$state = as.character(asthma_with_coords$state)
+# asthma_with_coords$state[is.na(asthma_with_coords$state)] = fips_info(asthma_with_coords$fips[is.na(asthma_with_coords$state)])$full
+# 
+# population = read.csv("Child population by age group.csv")
+# 
+# population = population %>%
+#   filter(Location != "United States" &
+#            TimeFrame == 2016 &
+#            Age.group == "Total less than 18" &
+#            DataFormat == "Number") %>%
+#   select(Location, Data) %>%
+#   rename(total_population = Data)
+# 
+# 
+# asthma_with_coords = merge(asthma_with_coords, population, by.x = "state", by.y = "Location") %>%
+#   select(-total_population.x)
+# 
+# setnames(asthma_with_coords, "total_population.y", "total_population")
 
 # write.csv(asthma_with_coords, "2016Asthma_Final_w_KrigingParams.csv",row.names=FALSE)
-## run initial (non-spatial) GLM
+
+## run initial (non-spatial) GLM - Poisson regression 
 loglinear_model = glm(asthma_count ~ offset(log(total_population)) + 
                         obesity_rate_2016 + pct_daily_smokers + meanAQI.Ozone,
                      family = "poisson", data = asthma_with_coords)
@@ -148,49 +152,53 @@ get_long_in_km <- function(lat, long, R){
 asthma_with_coords$x.dist <- mapply(get_lat_in_km, asthma_with_coords$lat, asthma_with_coords$long, R)
 asthma_with_coords$y.dist <- mapply(get_long_in_km, asthma_with_coords$lat, asthma_with_coords$long, R)
 
-## run initial (non-spatial) GLM
-loglinear_model = glm(asthma_count ~ offset(log(total_population)) + obesity_rate_2016 + pct_daily_smokers + pct_black + log(meanAQI.Ozone)
-                      + log(meanAQI.Other),
-                      family = "poisson", data = asthma_with_coords)
-summary(loglinear_model)
 
-## save the residuals 
 loglinResids <- residuals(loglinear_model)
 # since we do not have asthma data for some states, make sure to only get the coordinates for the 
-x.dist <- asthma_with_coords[!is.na(asthma_with_coords$asthma_count)]$x.dist
-y.dist <- asthma_with_coords[!is.na(asthma_with_coords$asthma_count)]$y.dist
+x.dist <- asthma_with_coords[!is.na(asthma_with_coords$asthma_count)]$x.dist/1000
+y.dist <- asthma_with_coords[!is.na(asthma_with_coords$asthma_count)]$y.dist/1000 # try dividing by 1000 to make the distance smaller 
 
 
 residData <- data.table(cbind(x.dist, y.dist, loglinResids))
 
 setnames(residData, c("x.dist", "y.dist", "residuals"))
 
-emp.variog <- variogram(loglinResids~1,locations=~x.dist+y.dist, data=residData)
+
+
+emp.variog <- variogram(loglinResids~1,locations=~x.dist+y.dist, data=residData, cutoff=10)
 plot(emp.variog, main="Empirical Semi-Variogram of the Log-Linear Residuals")
 
-## the autocorrelation between the points seems to be random 
-# this could be due to other variables that are not included in the model
+## try a spherical semi variogram w/ nugget effect
+sph.variog <- fit.variogram(emp.variog, vgm(psill=max(emp.variog$gamma)*0.6, model = "Sph", 
+                                            range=max(emp.variog$dist)/2, nugget = mean(emp.variog$gamma)/4))
+sph.variog 
+# make a plot of the empirical semi-variogram with the spherical semi-variogram overlayed 
+print(plot(emp.variog,sph.variog , main="Spherical Semi-Variogram"))
+attr(sph.variog, "SSErr")
 
-
-# fit an exponential variogram 
-sph.variog <- fit.variogram(emp.variog,vgm(psill=1000, nugget=500, range=3000, "Sph"),fit.method=2)
-sph.variog
+# fit an exponential semi-variogram 
+exp.variog <- fit.variogram(emp.variog,vgm(psill=max(emp.variog$gamma)*0.6,  model="Exp",
+                                           range=max(emp.variog$dist)/2, nugget = mean(emp.variog$gamma)/4),fit.method=2)
+exp.variog
 # make a plot of the empirical semi-variogram with the exponential semi-variogram overlayed 
-print(plot(emp.variog,sph.variog, main="Exponential Semi-Variogram"))
+print(plot(emp.variog,exp.variog, main="Exponential Semi-Variogram"))
 
+attr(exp.variog, "SSErr")
+
+## the exponential semi-variogram has lower Error sum of squares - we will work with this 
 
 ## specify the initial values for the parameters 
 beta.init <- loglinear_model$coefficients# use the estimates of beta from our loglinear GLM model
 sigma2.init <- exp.variog$psill[2] 
 phi.init <- 1/exp.variog$range[2] # range 
-tau2.init <- exp.variog$psill[1]  #we want to include a nugget effect
+tau2.init <- exp.variog$psill[1]  # if we want a nugget effect
 
 #### ---------------------------------------------
 ### Code for frequentist model w/ spatial effects: 
 #### ---------------------------------------------
 
 
-asthma_model <- asthma_with_coords[,c("asthma_count", "obesity_rate_2016", 
+asthma_model <- asthma_with_coords[,c("state","asthma_count", "obesity_rate_2016",
                                       "pct_daily_smokers", "meanAQI.Ozone", "meanAQI.Other", "pct_black", "lat", "long", "total_population")]
 
 asthma_subset <- asthma_model[!is.na(asthma_model$asthma_count)]
@@ -216,17 +224,19 @@ total_child_pop <- asthma_subset$total_population
 # br.reml
 
 
-#### ---------------------------------------------
-##### making predictions with the data ## update, probably can't use this 
-#### --------------------------------------------
+
 # we would like to predict asthma rates for the states without asthma data 
-# asthma_pred <- asthma_model[is.na(asthma_model$asthma_count)]
+ asthma_pred <- asthma_model[is.na(asthma_model$asthma_count)]
 # 
 # # the locations of the observations we want to predict on 
-# lat0 <- asthma_pred$lat
-# long0 <-asthma_pred$long
+lat0 <- asthma_pred$lat
+long0 <-asthma_pred$long
 # 
-# pred_coords <- as.matrix(cbind(lat0, long0))
+pred_coords <- as.matrix(cbind(lat0, long0))
+#### ---------------------------------------------
+##### making predictions with the data using REML ## update, probably can't use this since we are not working with Gaussian data
+#### --------------------------------------------
+
 # 
 # ## get the estimates of phi, sigma, tau from the REML 
 # sigma2.pred <- br.reml$sigmasq
@@ -253,8 +263,8 @@ total_child_pop <- asthma_subset$total_population
 
 
 ## set up the model 
-n.batch <- 2000
-batch.length <- 1000
+n.batch <- 5000
+batch.length <- 100
 n.samples = n.batch*batch.length
 burn.in <- 0.5*n.samples
 
@@ -264,17 +274,15 @@ set.seed(20190301)
 asthmaBayes <- spGLM(asthma_count ~obesity_rate_2016 + pct_daily_smokers + meanAQI.Ozone + meanAQI.Other + pct_black
                  , weights = total_child_pop, family="poisson", 
                  coords=coords,starting=list("phi"=phi.init,"sigma.sq"=sigma2.init, "tau.sq"=tau2.init,"beta"=beta.init, "w"=0),
-                 tuning=list("phi"=0.00001, "sigma.sq"=0.00001, "tau.sq"=0.00001, beta=c(rep(0.00000001, length(beta.init))), "w"=0.00001), #tried several different values of the tuning to make the trace plots look nicer 
-                 priors=list("phi.Unif"=c(0.003, 0.1), "sigma.sq.IG"=c(2, 0.6),
-                             "tau.sq.IG"=c(2, 0.1),"beta.Flat"), cov.model="exponential",n.samples=n.samples, verbose=TRUE, n.report=0.2*n.samples)
+                 tuning=list("phi"=0.00001, "sigma.sq"=0.00001, "tau.sq"=0.0001, beta=c(rep(0.00001, length(beta.init))), "w"=0.00001), #tried several different values of the tuning to make the trace plots look nicer 
+                 priors=list("phi.Unif"=c(0.001, 0.1), "sigma.sq.IG"=c(2, 1),
+                             "tau.sq.IG"=c(2, 1),"beta.Flat"), cov.model="exponential",n.samples=n.samples, verbose=TRUE, n.report=0.2*n.samples)
 
 ### diagnostics for convergence
 
 ## effective sample size for each variable:
 samps <- mcmc.list(asthmaBayes$p.beta.theta.samples)
 effectiveSize(samps)
-            
-
 ## we are looking to see if the mean of the chains for each variable has converged
 heidel.diag(samps, eps=0.1, pvalue=0.05)
 
@@ -286,9 +294,6 @@ par(mai=rep(0.5,4))
 plot(asthmaBayes$p.beta.theta.samples)
 
 
-
-
-
 #### ---------------------------------------------
 ## Bayesian predictions 
 #### ---------------------------------------------
@@ -297,11 +302,11 @@ n.pred <- 18
 pred_coords <- as.matrix(cbind(asthma_pred$lat, asthma_pred$long)) 
 # the variables for the 18 sites 
 asthma.predcov <- matrix(cbind(rep(1, n.pred), asthma_pred$obesity_rate_2016,  asthma_pred$pct_daily_smokers, asthma_pred$meanAQI.Ozone, asthma_pred$meanAQI.Other, 
-                               asthma_pred$pct_black),nrow=n.pred,ncol=6)
+                               asthma_pred$pct_black),nrow=n.pred, ncol = 6)
 
 # get the predictions at the 20 selected sites
 set.seed(03012019)
-bayesian_pred <- spPredict(asthmaBayes, pred.coords=coords, pred.covars=asthma.predcov, start=burn.in, verbose = FALSE, n.report=5000)
+bayesian_pred <- spPredict(asthmaBayes, pred.coords=coords, pred.covars=asthma.predcov, start=burn.in, thin=10, verbose = FALSE, n.report=5000)
 
 ## posterior mean of the predictions 
 post.pred.mean <- rowMeans(bayesian_pred$p.y.predictive.samples)
