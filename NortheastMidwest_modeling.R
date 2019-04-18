@@ -95,6 +95,7 @@ moran.test(residuals(health_model),
 ###------------------------------------
 set.seed(696)
 
+# get weights
 adj.US = US.weights$adj
 rep.US = rep(1:nrow(asthma_sub),US.weights$num)
 W = matrix(0, nrow(asthma_sub), nrow(asthma_sub))
@@ -105,6 +106,7 @@ for (i in 1:nrow(asthma_sub)) {
 asthma_count = round(asthma_sub$asthma_count / 1000)
 total_population = round(asthma_sub$total_population / 1000)
 
+# run bayesian disease mapping model
 health_dismap = S.CARleroux(formula = asthma_count ~ 
                             offset(log(total_population)) + 
                             asthma_sub$obesity_rate_2016 + asthma_sub$pct_daily_smokers,
@@ -121,3 +123,56 @@ health_dismap = S.CARleroux(formula = asthma_count ~
                           verbose = TRUE)
 
 health_dismap$summary.results
+  # obesity: non-significant based on the 95% credible interval. Overall, obesity is negatively related to asthma prevalence
+  # smoking: non-significant based on the 95% credible interval. Overall, smoking is positively related to asthma prevalence
+  # tau^2: measure of spatial variation. The estimate is positive suggesting that we have more events than what we would expect randomly
+
+# posterior median
+health_samples = health_dismap$samples$phi
+health_median = as.numeric(apply(health_samples, 2, median))
+
+plotclr = brewer.pal(4, "RdBu")[4:1]
+class = classIntervals(health_median, 4,
+                       style = "fixed",
+                       fixedBreaks = c(-.12, -.06, 0, .06, .12))
+colcode = findColours(class, plotclr)
+plot(US.poly, border = "black", axes = TRUE, main = "Spatial Random Effects of Health Model\nPosterior Median")
+plot(US.poly, col = colcode, add = TRUE)
+legend(x = "bottomright", legend = c("[-.12, -.06)", "[-.06, 0)", "[0, .06)", "[.06, .12]"),
+       fill = plotclr, cex = .75, ncol = 1, bty = "n")
+  # Most of the states in the Midwest have negative median spatial effects, meaning that those
+  # states had less asthma than would be expected by their smoking and obesity levels. 
+  # Contrasting, most of the Northeast had more asthma than would be exptected by their smoking
+  # and obesity levels.
+
+# posterior 95% lower confidence interval bound
+health_lower = as.numeric(apply(health_samples, 2, quantile, .025))
+
+plotclr = brewer.pal(4, "Blues")[4:1]
+class = classIntervals(health_lower, 4,
+                       style = "fixed",
+                       fixedBreaks = c(-.27, -.20, -.14, -.08, 0))
+colcode = findColours(class, plotclr)
+plot(US.poly, border = "black", axes = TRUE, main = "Spatial Random Effects of Health Model\nLower Bound")
+plot(US.poly, col = colcode, add = TRUE)
+legend(x = "bottomright", legend = c("[-.27, -.20)", "[-.20, -.14)", "[-.14, -.08)", "[-.08, 0]"),
+       fill = plotclr, cex = .75, ncol = 1, bty = "n")
+  # All of the states have a negative lower bound of their spatial random effects
+
+# posterior 95% upper confidence interval bound
+health_upper = as.numeric(apply(health_samples, 2, quantile, .975))
+
+plotclr = brewer.pal(4, "Reds")[1:4]
+class = classIntervals(health_lower, 4,
+                       style = "fixed",
+                       fixedBreaks = c(0, .08, .16, .24, .32))
+colcode = findColours(class, plotclr)
+plot(US.poly, border = "black", axes = TRUE, main = "Spatial Random Effects of Health Model\nUpper Bound")
+plot(US.poly, col = colcode, add = TRUE)
+legend(x = "bottomright", legend = c("[0, .08)", "[.08, .16)", "[.16, .24)", "[.24, .32]"),
+       fill = plotclr, cex = .75, ncol = 1, bty = "n")
+  # All of the states have a positive upper bound of their spatial random effects
+
+  # since all of the lower bounds of the spatial random effects were negative and all of the upper bounds
+  # of the upper bounds of the spatial random effects were positive, no states have a significant
+  # difference in their asthma prevalence than would be expected by smoking and obesity values within that state
