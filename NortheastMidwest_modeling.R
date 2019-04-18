@@ -1,0 +1,123 @@
+###------------------------------------
+## Script for Spatial Data Analysis
+## 2016 data
+## Subset on 22 Northeast/Midwest states
+##--------------------------------------
+
+## load libraries
+rm(list=ls())
+library(data.table)
+library(readxl)
+library(RColorBrewer)
+library(classInt)
+library(geoR)
+library(spBayes)
+library(fields)
+library(MBA)
+library(akima)
+library(ggplot2)
+library(usmap)
+library(colorRamps)
+library(gstat)
+library(CARBayes)
+library(maptools)
+library(spdep)
+library(dplyr)
+
+## set working directory
+# setwd("~/repos/biostat-696-project")
+# setwd("~/Documents/BIOSTATS 696 - Spatial Data Analysis/biostat-696-project")
+
+## Read in the data
+asthma = data.table(read.csv("2016Asthma_Final_w_KrigingParams.csv"))
+asthma$fips = as.numeric(fips(asthma$state))
+
+###-------------------------------------
+## Subset on states with data/neighbors
+## total of 22 states
+###-------------------------------------
+asthma[which(asthma$state == "New Hampshire"), "asthma_count"] = 28477
+asthma[which(asthma$state == "Iowa"), "asthma_count"] = 62517
+## NOTE: MUST CHANGE POPULATION COUNTS TO REFLECT CHANGE IN YEAR
+
+states_subset = c("Maine", "New Hampshire", "Vermont", "New York",
+                  "Massachusetts", "Connecticut", "Rhode Island",
+                  "New Jersey", "Pennsylvania", "Ohio", "Wisconsin",
+                  "Indiana", "Kentucky", "Michigan", "Illinois",
+                  "Missouri", "Iowa", "Minnesota", "Nebraska", 
+                  "Kansas", "Oklahoma")
+asthma_sub = asthma %>%
+  filter(state %in% states_subset)
+
+plot_usmap(data = asthma_sub[,1:3], values = "asthma_count", lines = "black", labels = TRUE) + 
+  scale_fill_gradientn(colours=blue2red(8), name="Asthma Count") +
+  theme(legend.position = "right") + 
+  labs(title="2016 Asthma Counts")
+
+####-----------------------------
+## test moran's I for overall counts
+####-----------------------------
+# create spatial polygon of US
+US = map("state",fill=TRUE,plot=FALSE)
+US.poly = map2SpatialPolygons(US,IDs=sapply(strsplit(US$names,":"),function(x) x[1]),
+                              proj4string=CRS("+proj=longlat + datum=wgs84"))
+US.poly = US.poly[which(names(US.poly) %in% tolower(states_subset))]
+US.nb = poly2nb(US.poly)
+US.weights = nb2WB(US.nb)
+US.list.w = nb2listw(US.nb)
+
+# test Moran's I
+moran.test(asthma_sub$asthma_count / asthma_sub$total_population, 
+           listw = US.list.w, randomisation=FALSE)
+  # Moran's I value is .48968 with corresponding pvalue = .3122 which is not significant at a 0.05 significance level, 
+  # indicating that we fail to reject the null hypothesis and conclude that there is no spatial autocorrelation in the 
+  # percentage of children in the population who have asthma between states
+
+###----------------------------------
+## test Moran's I for health indicators model
+###----------------------------------
+health_model = glm(asthma_count ~ offset(log(total_population)) + obesity_rate_2016 + pct_daily_smokers,
+                   family = poisson,
+                   data = asthma_sub)
+summary(health_model)
+  # all variables significant
+  # beta_obesity = -0.017, beta_smoking = -0.71
+  # there seems to be a decrease in the prevalence of asthma with higher rates of obesity and smoking ????
+
+moran.test(residuals(health_model),
+           listw = US.list.w, randomisation = FALSE)
+  # Moran's I value is -0.018 with corresponding pvalue = .421 which is not significant at the 0.05 significance level,
+  # indicating that we fail to reject the null hypothesis and conclude that there is no spatial autocorrelation in the
+  # residuals of the number of children who get asthma when predicted by obesity rate and percentage of smokers in the population
+
+###-------------------------------------
+## Disease mapping for health indicators
+###------------------------------------
+set.seed(696)
+
+adj.US = US.weights$adj
+rep.US = rep(1:nrow(asthma_sub),US.weights$num)
+W = matrix(0, nrow(asthma_sub), nrow(asthma_sub))
+for (i in 1:nrow(asthma_sub)) {
+  W[i, adj.US[rep.US == i]] = rep(1, US.weights$num[i])
+}
+
+asthma_count = round(asthma_sub$asthma_count / 1000)
+total_population = round(asthma_sub$total_population / 1000)
+
+health_dismap = S.CARleroux(formula = asthma_count ~ 
+                            offset(log(total_population)) + 
+                            asthma_sub$obesity_rate_2016 + asthma_sub$pct_daily_smokers,
+                          W=W,
+                          family = "poisson",
+                          rho = 1,
+                          burnin = 500,
+                          n.sample = 200000,
+                          thin = 1,
+                          prior.mean.beta = NULL,
+                          prior.var.beta = NULL,
+                          prior.nu2 = NULL,
+                          prior.tau2 = NULL,
+                          verbose = TRUE)
+
+health_dismap$summary.results
