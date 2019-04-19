@@ -7,19 +7,34 @@
 rm(list=ls())
 library(data.table)
 library(readxl)
-library(RColorBrewer)
-library(classInt)
-library(geoR)
-library(spBayes)
-library(fields)
-library(MBA)
-library(akima)
-library(ggplot2)
-library(usmap)
-library(colorRamps)
-
+library(dplyr)
 #setwd("~/repos/biostat-696-project")
 # setwd("~/Documents/BIOSTATS 696 - Spatial Data Analysis/biostat-696-project")
+
+#### ---------------------------------------------
+###   Education Analysis 
+#### ---------------------------------------------
+## load in 2016 air quality data 
+educ2016 <- data.table(read.csv("ACGR_RE_Characteristics_2016.csv"))
+# jsut get the state and the % high school complettion rates 
+educ2016 <- educ2016[,c(1:2)]
+educ2016[Table.1.=="Virginia3"]$Table.1. <- "Virginia"
+educ2016$fips <- fips(educ2016$Table.1.)
+educ2016 <- educ2016[!is.na(fips)]
+setnames(educ2016, c("state", "pct_high_school", "fips"))
+
+educ2016$fips <- as.numeric(educ2016$fips)
+educ2016$pct_high_school <- as.character(educ2016$pct_high_school)
+educ2016$pct_high_school <- as.numeric(educ2016$pct_high_school)
+
+plot_usmap(data =educ2016, values = "pct_high_school", lines = "black", labels = TRUE) + 
+  scale_fill_gradientn(colours=blue2red(5), name="% HS Graduation") +
+  theme(legend.position = "right") + 
+  labs(title=paste0("2016 4 Year High School Graduation Rate"))
+
+
+setnames(educ2016, c("state", "pct_high_school", "fips"))
+
 
 #### ---------------------------------------------
 ###   Smoking Data Analysis 
@@ -96,9 +111,9 @@ smoking2016 <- smoking2016[!state%in%c("National", "Alaska", "Hawaii")]
 smoking2016$fips <- fips(smoking2016$state)
 
 plot_usmap(data =smoking2016, values = "pct_daily_smokers", lines = "black") + 
-  scale_fill_gradientn(colours=blue2red(8), name="% of Daily Smokers") +
+  scale_fill_gradientn(colours=blue2red(8), name="Proportion of Daily Smokers") +
   theme(legend.position = "right") + 
-  labs(title="2016 % Of Daily Smokers by State")
+  labs(title="2016 Proportion Of Daily Smokers by State")
 
 
 #### ---------------------------------------------
