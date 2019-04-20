@@ -29,7 +29,7 @@ library(dplyr)
 # setwd("~/Documents/BIOSTATS 696 - Spatial Data Analysis/biostat-696-project")
 
 ## Read in the data
-asthma = data.table(read.csv("2016Asthma_Final_w_KrigingParams.csv"))
+asthma = data.table(read.csv("2016Asthma_Final_w_KrigingParams_PM25.csv"))
 asthma$fips = as.numeric(fips(asthma$state))
 
 ###-------------------------------------
@@ -54,6 +54,12 @@ plot_usmap(data = asthma_sub[,1:3], values = "asthma_count", lines = "black", la
   theme(legend.position = "right") + 
   labs(title="2016 Asthma Counts")
 
+asthma_percentage = asthma_sub$asthma_count / asthma_sub$total_population
+plot_usmap(data = cbind(asthma_sub[,1:2], asthma_percentage), values = "asthma_percentage", lines = "black", labels = TRUE) + 
+  scale_fill_gradientn(colours=blue2red(8), name="Asthma Count") +
+  theme(legend.position = "right") + 
+  labs(title="2016 Asthma Percentages")
+
 ####-----------------------------
 ## test moran's I for overall counts
 ####-----------------------------
@@ -69,7 +75,7 @@ US.list.w = nb2listw(US.nb)
 # test Moran's I
 moran.test(asthma_sub$asthma_count / asthma_sub$total_population, 
            listw = US.list.w, randomisation=FALSE)
-  # Moran's I value is .48968 with corresponding pvalue = .3122 which is not significant at a 0.05 significance level, 
+  # Moran's I value is .0278 with corresponding pvalue = .3 which is not significant at a 0.05 significance level, 
   # indicating that we fail to reject the null hypothesis and conclude that there is no spatial autocorrelation in the 
   # percentage of children in the population who have asthma between states
 
@@ -86,7 +92,7 @@ summary(health_model)
 
 moran.test(residuals(health_model),
            listw = US.list.w, randomisation = FALSE)
-  # Moran's I value is -0.018 with corresponding pvalue = .421 which is not significant at the 0.05 significance level,
+  # Moran's I value is -0.0673 with corresponding pvalue = .5 which is not significant at the 0.05 significance level,
   # indicating that we fail to reject the null hypothesis and conclude that there is no spatial autocorrelation in the
   # residuals of the number of children who get asthma when predicted by obesity rate and percentage of smokers in the population
 
@@ -163,7 +169,7 @@ legend(x = "bottomright", legend = c("[-.27, -.20)", "[-.20, -.14)", "[-.14, -.0
 health_upper = as.numeric(apply(health_samples, 2, quantile, .975))
 
 plotclr = brewer.pal(4, "Reds")[1:4]
-class = classIntervals(health_lower, 4,
+class = classIntervals(health_upper, 4,
                        style = "fixed",
                        fixedBreaks = c(0, .08, .16, .24, .32))
 colcode = findColours(class, plotclr)
@@ -176,3 +182,162 @@ legend(x = "bottomright", legend = c("[0, .08)", "[.08, .16)", "[.16, .24)", "[.
   # since all of the lower bounds of the spatial random effects were negative and all of the upper bounds
   # of the upper bounds of the spatial random effects were positive, no states have a significant
   # difference in their asthma prevalence than would be expected by smoking and obesity values within that state
+
+
+###-------------------------------------
+## Disease mapping for environmental indicators
+###------------------------------------
+
+env_dismap = S.CARleroux(formula = asthma_count ~ 
+                              offset(log(total_population)) + 
+                              asthma_sub$meanAQI.PM2.5 + asthma_sub$meanAQI.Ozone,
+                            W=W,
+                            family = "poisson",
+                            rho = 1,
+                            burnin = 500,
+                            n.sample = 200000,
+                            thin = 1,
+                            prior.mean.beta = NULL,
+                            prior.var.beta = NULL,
+                            prior.nu2 = NULL,
+                            prior.tau2 = NULL,
+                            verbose = TRUE)
+
+env_dismap$summary.results
+  # PM2.5: non-significant based on the 95% credible interval. Overall, PM2.5 is positively related to asthma prevalence
+  # ozone: non-significant based on the 95% credible interval. Overall, ozone concentration is positively related to asthma prevalence
+  # tau^2: measure of spatial variation. The estimate is positive suggesting that we have more events than what we would expect randomly
+
+# posterior median
+env_samples = env_dismap$samples$phi
+env_median = as.numeric(apply(env_samples, 2, median))
+
+plotclr = brewer.pal(4, "RdBu")[4:1]
+class = classIntervals(env_median, 4,
+                       style = "fixed",
+                       fixedBreaks = c(-.12, -.06, 0, .06, .12))
+colcode = findColours(class, plotclr)
+plot(US.poly, border = "black", axes = TRUE, main = "Spatial Random Effects of Environmental Model\nPosterior Median")
+plot(US.poly, col = colcode, add = TRUE)
+legend(x = "bottomright", legend = c("[-.12, -.06)", "[-.06, 0)", "[0, .06)", "[.06, .12]"),
+       fill = plotclr, cex = .75, ncol = 1, bty = "n")
+  # Most of the states in the Midwest have negative median spatial effects, meaning that those
+  # states had less asthma than would be expected by their PM2.5 and ozone concentration levels. 
+  # Contrasting, the Northeast had more asthma than would be exptected by their PM2.5 and ozone
+  # concentration levels.
+
+# posterior 95% lower confidence interval bound
+env_lower = as.numeric(apply(env_samples, 2, quantile, .025))
+
+plotclr = brewer.pal(4, "Blues")[4:1]
+class = classIntervals(env_lower, 4,
+                       style = "fixed",
+                       fixedBreaks = c(-.27, -.20, -.14, 0, .005))
+colcode = findColours(class, plotclr)
+plot(US.poly, border = "black", axes = TRUE, main = "Spatial Random Effects of Environmental Model\nLower Bound")
+plot(US.poly, col = colcode, add = TRUE)
+legend(x = "bottomright", legend = c("[-.27, -.20)", "[-.20, -.14)", "[-.14, 0)", "[0, .005]"),
+       fill = plotclr, cex = .75, ncol = 1, bty = "n")
+  # Most of the states have a negative lower bound of their spatial random effects
+  # except for Massachusetts which has a sligtly positive upper bound
+
+# posterior 95% upper confidence interval bound
+env_upper = as.numeric(apply(env_samples, 2, quantile, .975))
+
+plotclr = brewer.pal(4, "Reds")[1:4]
+class = classIntervals(env_upper, 4,
+                       style = "fixed",
+                       fixedBreaks = c(-.005, 0, .15, .22, .31))
+colcode = findColours(class, plotclr)
+plot(US.poly, border = "black", axes = TRUE, main = "Spatial Random Effects of Environmental Model\nUpper Bound")
+plot(US.poly, col = colcode, add = TRUE)
+legend(x = "bottomright", legend = c("[-.005, 0)", "[0, .15)", "[.15, .22)", "[.22, .31]"),
+       fill = plotclr, cex = .75, ncol = 1, bty = "n")
+  # Most of the states have a positive upper bound of their spatial random effects
+  # Ohio and Illinois have negative upper bounds of thier spatial random effects. 
+
+  # overall most of the states do not have significant spatial random effects, meaning that their
+  # asthma prevalence is no different than what we would expect given their PM2.5 and ozone concentration
+  # levels. Contrasting, Ohio and Illinois have negative spatial random effects meaning that they have less
+  # asthma prevalence than would be expected by their PM2.5 and ozone concentration whereas Massachusetts
+  # has a positive spatial random effect and thus has more asthma than would be expected by PM2.5 and
+  # ozone concentration. 
+
+###-------------------------------------
+## Disease mapping for socioeconomic indicators
+###------------------------------------
+
+socio_dismap = S.CARleroux(formula = asthma_count ~ 
+                           offset(log(total_population)) + 
+                           asthma_sub$pct_black + asthma_sub$pct_high_school,
+                         W=W,
+                         family = "poisson",
+                         rho = 1,
+                         burnin = 500,
+                         n.sample = 200000,
+                         thin = 1,
+                         prior.mean.beta = NULL,
+                         prior.var.beta = NULL,
+                         prior.nu2 = NULL,
+                         prior.tau2 = NULL,
+                         verbose = TRUE)
+
+socio_dismap$summary.results
+  # pct_black: non-significant based on the 95% credible interval. Overall, pct_black is negatively related to asthma prevalence
+  # pct_high_school: non-significant based on the 95% credible interval. Overall, pct_high_school is negatively related to asthma prevalence
+  # tau^2: measure of spatial variation. The estimate is positive suggesting that we have more events than what we would expect randomly
+
+# posterior median
+socio_samples = socio_dismap$samples$phi
+socio_median = as.numeric(apply(socio_samples, 2, median))
+
+plotclr = brewer.pal(4, "RdBu")[4:1]
+class = classIntervals(socio_median, 4,
+                       style = "fixed",
+                       fixedBreaks = c(-.12, -.06, 0, .06, .13))
+colcode = findColours(class, plotclr)
+plot(US.poly, border = "black", axes = TRUE, main = "Spatial Random Effects of Socioeconomic Model\nPosterior Median")
+plot(US.poly, col = colcode, add = TRUE)
+legend(x = "bottomright", legend = c("[-.12, -.06)", "[-.06, 0)", "[0, .06)", "[.06, .13]"),
+       fill = plotclr, cex = .75, ncol = 1, bty = "n")
+  # Most of the states in the Midwest have negative median spatial effects, meaning that those
+  # states had less asthma than would be expected by their PM2.5 and ozone concentration levels. 
+  # Contrasting, the Northeast had more asthma than would be exptected by their PM2.5 and ozone
+  # concentration levels.
+
+# posterior 95% lower confidence interval bound
+socio_lower = as.numeric(apply(socio_samples, 2, quantile, .025))
+
+plotclr = brewer.pal(4, "Blues")[4:1]
+class = classIntervals(env_lower, 4,
+                       style = "fixed",
+                       fixedBreaks = c(-.29, -.21, -.14, 0, .02))
+colcode = findColours(class, plotclr)
+plot(US.poly, border = "black", axes = TRUE, main = "Spatial Random Effects of Socioeconomic Model\nLower Bound")
+plot(US.poly, col = colcode, add = TRUE)
+legend(x = "bottomright", legend = c("[-.29, -.21)", "[-.21, -.14)", "[-.14, 0)", "[0, .02]"),
+       fill = plotclr, cex = .75, ncol = 1, bty = "n")
+  # Most of the states have a negative lower bound of their spatial random effects
+  # except for Massachusetts which has a sligtly positive upper bound 
+
+# posterior 95% upper confidence interval bound
+socio_upper = as.numeric(apply(socio_samples, 2, quantile, .975))
+
+plotclr = brewer.pal(4, "Reds")[1:4]
+class = classIntervals(socio_upper, 4,
+                       style = "fixed",
+                       fixedBreaks = c(0, .07, .15, .21, .29))
+colcode = findColours(class, plotclr)
+plot(US.poly, border = "black", axes = TRUE, main = "Spatial Random Effects of Socioeconomic Model\nUpper Bound")
+plot(US.poly, col = colcode, add = TRUE)
+legend(x = "bottomright", legend = c("[0, .07)", "[.07, .15)", "[.15, .21)", "[.21, .29]"),
+       fill = plotclr, cex = .75, ncol = 1, bty = "n")
+  # All of the states have a positive upper bound of their spatial random effects
+
+  # All of the states besides Massachuessets have insignificant spatial random effects.
+  # Massachuestts has a positive spatial random effect meaning they have more asthma than
+  # would be expected by the percentage of the population that is Black and the percentage
+  # of the population with a high school degree. 
+
+
+
