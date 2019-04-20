@@ -23,6 +23,7 @@ library(CARBayes)
 library(maptools)
 library(spdep)
 library(dplyr)
+library(coda)
 
 ## set working directory
 # setwd("~/repos/biostat-696-project")
@@ -37,6 +38,7 @@ asthma$fips = as.numeric(fips(asthma$state))
 ## total of 22 states
 ###-------------------------------------
 asthma[which(asthma$state == "New Hampshire"), "asthma_count"] = 28477
+### 4/20 update -> I found 2015 data for IOWA (wrote about it more in the Overleaf paper)
 asthma[which(asthma$state == "Iowa"), "asthma_count"] = 62517
 ## NOTE: MUST CHANGE POPULATION COUNTS TO REFLECT CHANGE IN YEAR
 
@@ -69,7 +71,7 @@ US.list.w = nb2listw(US.nb)
 # test Moran's I
 moran.test(asthma_sub$asthma_count / asthma_sub$total_population, 
            listw = US.list.w, randomisation=FALSE)
-  # Moran's I value is .48968 with corresponding pvalue = .3122 which is not significant at a 0.05 significance level, 
+  # Moran's I value is .0278 with corresponding pvalue = .3122 which is not significant at a 0.05 significance level, 
   # indicating that we fail to reject the null hypothesis and conclude that there is no spatial autocorrelation in the 
   # percentage of children in the population who have asthma between states
 
@@ -77,7 +79,7 @@ moran.test(asthma_sub$asthma_count / asthma_sub$total_population,
 ## test Moran's I for health indicators model
 ###----------------------------------
 health_model = glm(asthma_count ~ offset(log(total_population)) + obesity_rate_2016 + pct_daily_smokers,
-                   family = poisson,
+                   family = "poisson",
                    data = asthma_sub)
 summary(health_model)
   # all variables significant
@@ -89,6 +91,27 @@ moran.test(residuals(health_model),
   # Moran's I value is -0.018 with corresponding pvalue = .421 which is not significant at the 0.05 significance level,
   # indicating that we fail to reject the null hypothesis and conclude that there is no spatial autocorrelation in the
   # residuals of the number of children who get asthma when predicted by obesity rate and percentage of smokers in the population
+
+
+###----------------------------------
+## test Moran's I for environmental model
+###----------------------------------
+
+environ_model = glm(asthma_count ~ offset(log(total_population)) + meanAQI.Ozone + meanAQI.Other + meanAQI.PM2.5 + pct_daily_smokers,
+                   family = "poisson",
+                   data = asthma_sub)
+summary(environ_model)
+## Ozone = 0.007262
+## Other =  -0.001396
+## PM 2.5 =  0.003745
+## pct_smoking = -0.01765
+
+## All of the coefficients are significant at 0.05. The signs of smoking and meanAQI other are negative, but the signs 
+# of Ozone and PM2.5 are positive. 
+moran.test(residuals(environ_model),
+           listw = US.list.w, randomisation = FALSE)
+
+### Moran's I is -0.12571889  and the  p value is above 0.05 ( 0.683)
 
 ###-------------------------------------
 ## Disease mapping for health indicators
@@ -122,10 +145,26 @@ health_dismap = S.CARleroux(formula = asthma_count ~
                           prior.tau2 = NULL,
                           verbose = TRUE)
 
+
+
+
 health_dismap$summary.results
   # obesity: non-significant based on the 95% credible interval. Overall, obesity is negatively related to asthma prevalence
   # smoking: non-significant based on the 95% credible interval. Overall, smoking is positively related to asthma prevalence
   # tau^2: measure of spatial variation. The estimate is positive suggesting that we have more events than what we would expect randomly
+
+## function to get traceplots 
+numBetas <- c("intercept","obesity_rate_2016", "pct_daily_smokers") #intercept + covariates 
+traceplot(health_dismap$samples$beta, main="Trace of the Parameters")
+
+## for loop to make the traceplots of the betas 
+for(i in 1:length(numBetas)){
+  traceplot(test[,i], main=paste0("Trace of ",numBetas[i]))
+}
+
+## traceplots of the spatial parameters 
+traceplot(health_dismap$samples$tau2)
+traceplot(health_dismap$samples$phi)
 
 # posterior median
 health_samples = health_dismap$samples$phi
