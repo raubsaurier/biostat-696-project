@@ -38,8 +38,9 @@ asthma$fips = as.numeric(fips(asthma$state))
 ## total of 22 states
 ###-------------------------------------
 asthma[which(asthma$state == "New Hampshire"), "asthma_count"] = 28477
-### 4/20 update -> I found 2015 data for IOWA (wrote about it more in the Overleaf paper)
-asthma[which(asthma$state == "Iowa"), "asthma_count"] = 62517
+### 4/20 update -> I found 2015 asthma % data for Iowa (wrote about it more in the Overleaf paper)
+# assuming the asthma rate stayed constant into the next year, multiply Iowa population by 0.06: 
+asthma[which(asthma$state == "Iowa"), "asthma_count"] = 43822
 ## NOTE: MUST CHANGE POPULATION COUNTS TO REFLECT CHANGE IN YEAR
 
 states_subset = c("Maine", "New Hampshire", "Vermont", "New York",
@@ -123,7 +124,7 @@ health_dismap = S.CARleroux(formula = asthma_count ~
                           W=W,
                           family = "poisson",
                           rho = 1,
-                          burnin = 500,
+                          burnin = 50000,
                           n.sample = 200000,
                           thin = 1,
                           prior.mean.beta = NULL,
@@ -213,8 +214,7 @@ env_dismap = S.CARleroux(formula = asthma_count ~
                               asthma_sub$meanAQI.PM2.5 + asthma_sub$meanAQI.Ozone,
                             W=W,
                             family = "poisson",
-                            rho = 1,
-                            burnin = 500,
+                            burnin = 50000,
                             n.sample = 200000,
                             thin = 1,
                             prior.mean.beta = NULL,
@@ -222,6 +222,25 @@ env_dismap = S.CARleroux(formula = asthma_count ~
                             prior.nu2 = NULL,
                             prior.tau2 = NULL,
                             verbose = TRUE)
+
+### Traceplots for the beta parameters and spatial parameters: 
+
+## function to get traceplots of the parameters 
+environ_betas <- c("intercept","meanAQI.PM2.5", "meanAQI.Ozone") #intercept + covariates 
+colnames(env_dismap$samples$beta) <- betas
+
+
+## for loop to make the traceplots + density plots of the betas 
+for(i in 1:length(environ_betas)){
+  traceplot(env_dismap$samples$beta[,i], main=paste0("Trace of ",environ_betas[i]))
+  plot(density(env_dismap$samples$beta[,i]), main=paste0("Density of ",environ_betas[i]))
+}
+
+## traceplots + density plots of the spatial parameters 
+traceplot(env_dismap$samples$phi, main="Traceplot of Phi")
+plot(density(env_dismap$samples$phi), main="Density of Phi")
+traceplot(env_dismap$samples$tau2)
+
 
 env_dismap$summary.results
   # PM2.5: non-significant based on the 95% credible interval. Overall, PM2.5 is positively related to asthma prevalence
@@ -293,7 +312,7 @@ socio_dismap = S.CARleroux(formula = asthma_count ~
                          W=W,
                          family = "poisson",
                          rho = 1,
-                         burnin = 500,
+                         burnin = 50000,
                          n.sample = 200000,
                          thin = 1,
                          prior.mean.beta = NULL,
@@ -301,6 +320,19 @@ socio_dismap = S.CARleroux(formula = asthma_count ~
                          prior.nu2 = NULL,
                          prior.tau2 = NULL,
                          verbose = TRUE)
+
+## function to get traceplots 
+socio_betas <- c("intercept","pct_black", "pct_high_school") #intercept + covariates 
+colnames(env_dismap$samples$beta) <- socio_betas
+
+
+## for loop to make the traceplots of the betas 
+for(i in 1:length(socio_betas)){
+  traceplot(env_dismap$samples$beta[,i], main=paste0("Trace of ",socio_betas[i]))
+  plot(density(env_dismap$samples$beta[,i]), main=paste0("Density of ",socio_betas[i]))
+}
+
+
 
 socio_dismap$summary.results
   # pct_black: non-significant based on the 95% credible interval. Overall, pct_black is negatively related to asthma prevalence
