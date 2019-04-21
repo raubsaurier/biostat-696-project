@@ -70,6 +70,7 @@ plot_usmap(data = asthma_sub, values = "meanAQI.Ozone", lines = "black", labels 
   theme(legend.position = "right") + 
   labs(title="2016 Mean AQI by State")
 
+
 ####-----------------------------
 ## test moran's I for overall counts
 ####-----------------------------
@@ -211,23 +212,24 @@ legend(x = "bottomright", legend = c("[0, .08)", "[.08, .16)", "[.16, .24)", "[.
   # of the upper bounds of the spatial random effects were positive, no states have a significant
   # difference in their asthma prevalence than would be expected by smoking and obesity values within that state
 
+
 ###-------------------------------------
 ## Disease mapping for environmental indicators
 ###------------------------------------
 
 env_dismap = S.CARleroux(formula = asthma_count ~ 
-                           offset(log(total_population)) + 
-                           asthma_sub$meanAQI.PM2.5 + asthma_sub$meanAQI.Ozone +asthma_sub$meanAQI.Other,
-                         W=W,
-                         family = "poisson",
-                         burnin = 50000,
-                         n.sample = 200000,
-                         thin = 1,
-                         prior.mean.beta = NULL,
-                         prior.var.beta = NULL,
-                         prior.nu2 = NULL,
-                         prior.tau2 = NULL,
-                         verbose = TRUE)
+                              offset(log(total_population)) + 
+                              asthma_sub$meanAQI.PM2.5 + asthma_sub$meanAQI.Ozone +asthma_sub$meanAQI.Other,
+                            W=W,
+                            family = "poisson",
+                            burnin = 50000,
+                            n.sample = 200000,
+                            thin = 1,
+                            prior.mean.beta = NULL,
+                            prior.var.beta = NULL,
+                            prior.nu2 = NULL,
+                            prior.tau2 = NULL,
+                            verbose = TRUE)
 
 ### Traceplots for the beta parameters and spatial parameters: 
 
@@ -249,9 +251,9 @@ traceplot(env_dismap$samples$tau2)
 
 
 env_dismap$summary.results
-# PM2.5: non-significant based on the 95% credible interval. Overall, PM2.5 is positively related to asthma prevalence
-# ozone: non-significant based on the 95% credible interval. Overall, ozone concentration is positively related to asthma prevalence
-# tau^2: measure of spatial variation. The estimate is positive suggesting that we have more events than what we would expect randomly
+  # PM2.5: non-significant based on the 95% credible interval. Overall, PM2.5 is positively related to asthma prevalence
+  # ozone: non-significant based on the 95% credible interval. Overall, ozone concentration is positively related to asthma prevalence
+  # tau^2: measure of spatial variation. The estimate is positive suggesting that we have more events than what we would expect randomly
 
 # posterior median
 env_samples = env_dismap$samples$phi
