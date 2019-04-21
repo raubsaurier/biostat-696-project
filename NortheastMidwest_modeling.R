@@ -57,9 +57,9 @@ plot_usmap(data = asthma_sub[,1:3], values = "asthma_count", lines = "black", la
   theme(legend.position = "right") + 
   labs(title="2016 Asthma Counts")
 
-asthma_percentage = asthma_sub$asthma_count / asthma_sub$total_population
+asthma_percentage = (asthma_sub$asthma_count / asthma_sub$total_population) * 100
 plot_usmap(data = cbind(asthma_sub[,1:2], asthma_percentage), values = "asthma_percentage", lines = "black", labels = TRUE) + 
-  scale_fill_gradientn(colours=blue2red(8), name="Asthma Rate") +
+  scale_fill_gradientn(colours=blue2red(8), name="Asthma Rate (in %)") +
   theme(legend.position = "right") + 
   labs(title="2016 Asthma Prevalence Rates by State")
 
@@ -69,6 +69,21 @@ plot_usmap(data = asthma_sub, values = "meanAQI.Ozone", lines = "black", labels 
   scale_fill_gradientn(colours=blue2red(8), name="Mean AQI") +
   theme(legend.position = "right") + 
   labs(title="2016 Mean AQI by State")
+
+## Obesity Graphs 
+plot_usmap(data = asthma_sub, values = "obesity_rate_2016", lines = "black", labels = TRUE) + 
+  scale_fill_gradientn(colours=blue2red(8), name="Childhood Obesity Rate") +
+  theme(legend.position = "right") + 
+  labs(title="2016 Childhood Obesity Rate by State")
+
+
+## Smoking Graph
+## AQI graph
+plot_usmap(data = asthma_sub, values = "pct_daily_smokers", lines = "black", labels = TRUE) + 
+  scale_fill_gradientn(colours=blue2red(8), name="% of Daily Smokers") +
+  theme(legend.position = "right") + 
+  labs(title="2016 % of Daily Smokers by State")
+
 
 ####-----------------------------
 ## test moran's I for overall counts
