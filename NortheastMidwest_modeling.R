@@ -139,9 +139,8 @@ asthma_count = round(asthma_sub$asthma_count / 1000)
 total_population = round(asthma_sub$total_population / 1000)
 
 
-# run bayesian disease mapping model
-health_dismap = S.CARleroux(formula = asthma_count ~ 
-                            offset(log(total_population)) + 
+# run Bayesian spatial linear model w/ improper CAR prior for health covariates
+health_dismap = S.CARleroux(formula =asthma_count ~ log(offset(total_population)) +
                             asthma_sub$obesity_rate_2016 + asthma_sub$pct_daily_smokers,
                           W=W,
                           family = "poisson",
@@ -178,6 +177,7 @@ traceplot(health_dismap$samples$phi)
 # posterior median
 health_samples = health_dismap$samples$phi
 health_median = as.numeric(apply(health_samples, 2, median))
+
 
 plotclr = brewer.pal(4, "RdBu")[4:1]
 class = classIntervals(health_median, 4,
@@ -226,11 +226,10 @@ legend(x = "bottomright", legend = c("[0, .08)", "[.08, .16)", "[.16, .24)", "[.
   # difference in their asthma prevalence than would be expected by smoking and obesity values within that state
 
 ###-------------------------------------
-## Disease mapping for environmental indicators
+## Bayesian model w/ improper CAR for environmental indicators
 ###------------------------------------
 
-env_dismap = S.CARleroux(formula = asthma_count ~ 
-                           offset(log(total_population)) + 
+env_dismap = S.CARleroux(formula = asthma_count~ log(offset(otal_population)) + 
                            asthma_sub$meanAQI.PM2.5 + asthma_sub$meanAQI.Ozone +asthma_sub$meanAQI.Other,
                          W=W,
                          family = "poisson",
@@ -330,10 +329,10 @@ legend(x = "bottomright", legend = c("[-.005, 0)", "[0, .15)", "[.15, .22)", "[.
 # so I changed this to be a regular Bayesian linear model w/ spatial RF and an improper CAR prior
 #also wrote about it in the overleaf paper# 
 
-socio_dismap = S.CARleroux(formula = asthma_count/total_population
-                            + asthma_sub$pct_black + asthma_sub$pct_high_school,
+socio_dismap = S.CARleroux(formula = asthma_count ~log(offset(total_population)) + 
+                             asthma_sub$pct_black + asthma_sub$pct_high_school,
                          W=W,
-                         family = "gaussian",
+                         family = "poisson",
                          rho = 1,
                          burnin = 50000,
                          n.sample = 200000,
