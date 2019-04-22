@@ -76,7 +76,6 @@ plot_usmap(data = asthma_sub, values = "obesity_rate_2016", lines = "black", lab
   theme(legend.position = "right") + 
   labs(title="2016 Childhood Obesity Rate by State")
 
-
 ## Smoking Graph
 ## AQI graph
 plot_usmap(data = asthma_sub, values = "pct_daily_smokers", lines = "black", labels = TRUE) + 
@@ -139,6 +138,7 @@ for (i in 1:nrow(asthma_sub)) {
 asthma_count = round(asthma_sub$asthma_count / 1000)
 total_population = round(asthma_sub$total_population / 1000)
 
+
 # run bayesian disease mapping model
 health_dismap = S.CARleroux(formula = asthma_count ~ 
                             offset(log(total_population)) + 
@@ -157,19 +157,18 @@ health_dismap = S.CARleroux(formula = asthma_count ~
 
 
 
-
 health_dismap$summary.results
   # obesity: non-significant based on the 95% credible interval. Overall, obesity is negatively related to asthma prevalence
   # smoking: non-significant based on the 95% credible interval. Overall, smoking is positively related to asthma prevalence
   # tau^2: measure of spatial variation. The estimate is positive suggesting that we have more events than what we would expect randomly
 
 ## function to get traceplots 
-numBetas <- c("intercept","obesity_rate_2016", "pct_daily_smokers") #intercept + covariates 
-traceplot(health_dismap$samples$beta, main="Trace of the Parameters")
+healthBetas <- c("intercept","obesity_rate_2016", "pct_daily_smokers") #intercept + covariates 
 
 ## for loop to make the traceplots of the betas 
-for(i in 1:length(numBetas)){
-  traceplot(test[,i], main=paste0("Trace of ",numBetas[i]))
+for(i in 1:length(healthBetas)){
+  traceplot(health_dismap$samples$beta[,i], main=paste0("Trace of ",healthBetas[i]))
+  plot(density(health_dismap$samples$beta[,i]), main=paste0("Density of ",healthBetas[i]))
 }
 
 ## traceplots of the spatial parameters 
@@ -327,11 +326,14 @@ legend(x = "bottomright", legend = c("[-.005, 0)", "[0, .15)", "[.15, .22)", "[.
 ## Disease mapping for socioeconomic indicators
 ###------------------------------------
 
-socio_dismap = S.CARleroux(formula = asthma_count ~ 
-                           offset(log(total_population)) + 
-                           asthma_sub$pct_black + asthma_sub$pct_high_school,
+## I realized that we can't actually run a disease mapping model since we don't have "expected" cases of asthma
+# so I changed this to be a regular Bayesian linear model w/ spatial RF and an improper CAR prior
+#also wrote about it in the overleaf paper# 
+
+socio_dismap = S.CARleroux(formula = asthma_count/total_population
+                            + asthma_sub$pct_black + asthma_sub$pct_high_school,
                          W=W,
-                         family = "poisson",
+                         family = "gaussian",
                          rho = 1,
                          burnin = 50000,
                          n.sample = 200000,
