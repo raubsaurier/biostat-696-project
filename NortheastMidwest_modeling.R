@@ -24,6 +24,7 @@ library(maptools)
 library(spdep)
 library(dplyr)
 library(coda)
+library(gridExtra)
 
 ## set working directory
 # setwd("~/repos/biostat-696-project")
@@ -65,7 +66,6 @@ plot_usmap(data = cbind(asthma_sub[,1:2], asthma_percentage), values = "asthma_p
   theme(legend.position = "right") + 
   labs(title="2016 Asthma Prevalence Rates by State")
 
-
 ## AQI graph
 plot_usmap(data = asthma_sub, values = "meanAQI.Ozone", lines = "black", labels = TRUE) + 
   scale_fill_gradientn(colours=blue2red(8), name="Mean AQI") +
@@ -73,18 +73,47 @@ plot_usmap(data = asthma_sub, values = "meanAQI.Ozone", lines = "black", labels 
   labs(title="2016 Mean AQI by State")
 
 ## Obesity Graphs 
-plot_usmap(data = asthma_sub, values = "obesity_rate_2016", lines = "black", labels = TRUE) + 
-  scale_fill_gradientn(colours=blue2red(8), name="Childhood Obesity Rate") +
-  theme(legend.position = "right") + 
-  labs(title="2016 Childhood Obesity Rate by State")
+obesity_plot = plot_usmap(data = asthma_sub, values = "obesity_rate_2016", lines = "black") + 
+  scale_fill_gradientn(colours=blue2red(8), name="Adult Obesity Rate") +
+  theme(legend.key.size = unit(.35, "cm"), legend.position = "right") + 
+  labs(title="Adult Obesity Rate by State")
 
 ## Smoking Graph
 ## AQI graph
-plot_usmap(data = asthma_sub, values = "pct_daily_smokers", lines = "black", labels = TRUE) + 
+smoking_plot = plot_usmap(data = asthma_sub, values = "pct_daily_smokers", lines = "black") + 
   scale_fill_gradientn(colours=blue2red(8), name="% of Daily Smokers") +
-  theme(legend.position = "right") + 
-  labs(title="2016 % of Daily Smokers by State")
+  theme(legend.key.size = unit(.35, "cm"), legend.position = "right") + 
+  labs(title="Daily Smokering Rate by State")
 
+grid.arrange(obesity_plot, smoking_plot, ncol = 2)
+
+## PM2.5 graph
+pm2.5_plot = plot_usmap(data = asthma_sub, values = "meanAQI.PM2.5", lines = "black") + 
+  scale_fill_gradientn(colours=blue2red(8), name="PM 2.5 Level") +
+  theme(legend.key.size = unit(.35, "cm"), legend.position = "right") + 
+  labs(title="Average PM 2.5 Levels")
+
+## Ozone graph
+ozone_plot = plot_usmap(data = asthma_sub, values = "meanAQI.Ozone", lines = "black") + 
+  scale_fill_gradientn(colours=blue2red(8), name="Ozone Concentration") +
+  theme(legend.key.size = unit(.35, "cm"), legend.position = "right") + 
+  labs(title="Average Ozone Concentration")
+
+grid.arrange(pm2.5_plot, ozone_plot, ncol = 2)
+
+## % Black Graphs 
+race_plot = plot_usmap(data = asthma_sub, values = "pct_black", lines = "black") + 
+  scale_fill_gradientn(colours=blue2red(8), name="% of Black Residents") +
+  theme(legend.key.size = unit(.35, "cm"), legend.position = "right") + 
+  labs(title="Percentage of\nBlack Residents")
+
+## High School Education Graph
+edu_plot = plot_usmap(data = asthma_sub, values = "pct_high_school", lines = "black") + 
+  scale_fill_gradientn(colours=blue2red(8), name="% with a High School Degree") +
+  theme(legend.key.size = unit(.35, "cm"), legend.position = "right") + 
+  labs(title="Percentage with a\nHigh School Degree")
+
+grid.arrange(race_plot, edu_plot, ncol = 2)
 
 ####-----------------------------
 ## test moran's I for overall counts
