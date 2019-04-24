@@ -41,6 +41,8 @@ asthma[which(asthma$state == "New Hampshire"), "asthma_count"] = 28477
 ### 4/20 update -> I found 2015 asthma % data for Iowa (wrote about it more in the Overleaf paper)
 # assuming the asthma rate stayed constant into the next year, multiply Iowa population by 0.06: 
 asthma[which(asthma$state == "Iowa"), "asthma_count"] = 43822
+##### Checked the kidscenter data source with the CDC -> for the most part, it seems that the kids center statistic overestimates asthma prevelance 
+## (assuming CDC is gold standard) -> usually it is 1% higher 
 ## NOTE: MUST CHANGE POPULATION COUNTS TO REFLECT CHANGE IN YEAR
 
 states_subset = c("Maine", "New Hampshire", "Vermont", "New York",
@@ -144,10 +146,10 @@ health_dismap = S.CARleroux(formula =asthma_count ~ log(offset(total_population)
                             asthma_sub$obesity_rate_2016 + asthma_sub$pct_daily_smokers,
                           W=W,
                           family = "poisson",
-                          rho = 1,
                           burnin = 50000,
                           n.sample = 200000,
                           thin = 1,
+                          rho=1,
                           prior.mean.beta = NULL,
                           prior.var.beta = NULL,
                           prior.nu2 = NULL,
@@ -162,7 +164,7 @@ health_dismap$summary.results
   # tau^2: measure of spatial variation. The estimate is positive suggesting that we have more events than what we would expect randomly
 
 ## function to get traceplots 
-healthBetas <- c("intercept","obesity_rate_2016", "pct_daily_smokers") #intercept + covariates 
+healthBetas <- c("intercept","offset","obesity_rate_2016", "pct_daily_smokers") #intercept + covariates 
 
 ## for loop to make the traceplots of the betas 
 for(i in 1:length(healthBetas)){
@@ -171,8 +173,24 @@ for(i in 1:length(healthBetas)){
 }
 
 ## traceplots of the spatial parameters 
-traceplot(health_dismap$samples$tau2)
-traceplot(health_dismap$samples$phi)
+traceplot(health_dismap$samples$tau2, main="Trace of Tau2")
+traceplot(health_dismap$samples$phi, main="Trace of Phi")
+
+####### estimated risk #########
+
+###estimated risk from the model 
+health_risk <- health_dismap$fitted.values/asthma_sub$total_population
+health_round_risk <- round(quantile(health_risk),5)
+health_risk_cuts <- cut(health_round_risk,5)
+
+### we get a very very low estimated risk from the health model
+plotclr = brewer.pal(5, "Blues")
+class = classIntervals(health_risk, 5)
+colcode = findColours(class, plotclr)
+plot(US.poly, border = "black", axes = TRUE, main = "Estimated Risk from Health Model")
+plot(US.poly, col = colcode, add = TRUE)
+legend(x = "bottomright", legend = health_risk_cuts,
+       fill = plotclr, cex = .75, ncol = 1, bty = "n")
 
 # posterior median
 health_samples = health_dismap$samples$phi
@@ -229,13 +247,14 @@ legend(x = "bottomright", legend = c("[0, .08)", "[.08, .16)", "[.16, .24)", "[.
 ## Bayesian model w/ improper CAR for environmental indicators
 ###------------------------------------
 
-env_dismap = S.CARleroux(formula = asthma_count~ log(offset(otal_population)) + 
+env_dismap = S.CARleroux(formula = asthma_count~ log(offset(total_population)) + 
                            asthma_sub$meanAQI.PM2.5 + asthma_sub$meanAQI.Ozone +asthma_sub$meanAQI.Other,
                          W=W,
                          family = "poisson",
                          burnin = 50000,
                          n.sample = 200000,
                          thin = 1,
+                         rho=1,
                          prior.mean.beta = NULL,
                          prior.var.beta = NULL,
                          prior.nu2 = NULL,
@@ -245,9 +264,7 @@ env_dismap = S.CARleroux(formula = asthma_count~ log(offset(otal_population)) +
 ### Traceplots for the beta parameters and spatial parameters: 
 
 ## function to get traceplots of the parameters 
-environ_betas <- c("intercept","meanAQI.PM2.5", "meanAQI.Ozone") #intercept + covariates 
-colnames(env_dismap$samples$beta) <- betas
-
+environ_betas <- c("intercept","offset","meanAQI.PM2.5", "meanAQI.Ozone", "meanAQI.Other") #intercept + covariates 
 
 ## for loop to make the traceplots + density plots of the betas 
 for(i in 1:length(environ_betas)){
@@ -256,15 +273,32 @@ for(i in 1:length(environ_betas)){
 }
 
 ## traceplots + density plots of the spatial parameters 
+
 traceplot(env_dismap$samples$phi, main="Traceplot of Phi")
 plot(density(env_dismap$samples$phi), main="Density of Phi")
-traceplot(env_dismap$samples$tau2)
-
+## density + trace of tau2
+traceplot(env_dismap$samples$tau2,, main="Traceplot of Tau2")
+plot(density(env_dismap$samples$tau2), main="Density of Tau2")
 
 env_dismap$summary.results
 # PM2.5: non-significant based on the 95% credible interval. Overall, PM2.5 is positively related to asthma prevalence
 # ozone: non-significant based on the 95% credible interval. Overall, ozone concentration is positively related to asthma prevalence
 # tau^2: measure of spatial variation. The estimate is positive suggesting that we have more events than what we would expect randomly
+
+
+###estimated risk from the model 
+env_risk <- env_dismap$fitted.values/asthma_sub$total_population
+env_round_risk <- round(quantile(env_risk),5)
+env_risk_cuts <- cut(env_round_risk,5)
+
+### we get a very very low estimated risk from the environmental model
+plotclr = brewer.pal(5, "Blues")
+class = classIntervals(env_risk, 5)
+colcode = findColours(class, plotclr)
+plot(US.poly, border = "black", axes = TRUE, main = "Estimated Risk from Environmental Model")
+plot(US.poly, col = colcode, add = TRUE)
+legend(x = "bottomright", legend = env_risk_cuts,
+       fill = plotclr, cex = .75, ncol = 1, bty = "n")
 
 # posterior median
 env_samples = env_dismap$samples$phi
@@ -333,7 +367,6 @@ socio_dismap = S.CARleroux(formula = asthma_count ~log(offset(total_population))
                              asthma_sub$pct_black + asthma_sub$pct_high_school,
                          W=W,
                          family = "poisson",
-                         rho = 1,
                          burnin = 50000,
                          n.sample = 200000,
                          thin = 1,
@@ -344,14 +377,14 @@ socio_dismap = S.CARleroux(formula = asthma_count ~log(offset(total_population))
                          verbose = TRUE)
 
 ## function to get traceplots 
-socio_betas <- c("intercept","pct_black", "pct_high_school") #intercept + covariates 
+socio_betas <- c("intercept","offset","pct_black", "pct_high_school") #intercept + covariates 
 colnames(env_dismap$samples$beta) <- socio_betas
 
 
 ## for loop to make the traceplots of the betas 
 for(i in 1:length(socio_betas)){
-  traceplot(env_dismap$samples$beta[,i], main=paste0("Trace of ",socio_betas[i]))
-  plot(density(env_dismap$samples$beta[,i]), main=paste0("Density of ",socio_betas[i]))
+  traceplot(socio_dismap$samples$beta[,i], main=paste0("Trace of ",socio_betas[i]))
+  plot(density(socio_dismap$samples$beta[,i]), main=paste0("Density of ",socio_betas[i]))
 }
 
 
@@ -360,6 +393,23 @@ socio_dismap$summary.results
   # pct_black: non-significant based on the 95% credible interval. Overall, pct_black is negatively related to asthma prevalence
   # pct_high_school: non-significant based on the 95% credible interval. Overall, pct_high_school is negatively related to asthma prevalence
   # tau^2: measure of spatial variation. The estimate is positive suggesting that we have more events than what we would expect randomly
+
+### risks from the 
+###estimated risk from the model 
+SE_risk <- socio_dismap$fitted.values/asthma_sub$total_population
+SE_round_risk <-  round(quantile(SE_risk), 5)
+SE_risk_cuts <- cut(SE_round_risk,5)
+
+### we get a very very low estimated risk from the environmental model
+plotclr = brewer.pal(5, "Blues")
+class = classIntervals(SE_risk, 5)
+colcode = findColours(class, plotclr)
+plot(US.poly, border = "black", axes = TRUE, main = "Estimated Risk from Socio-Economic Model")
+plot(US.poly, col = colcode, add = TRUE)
+legend(x = "bottomright", legend = SE_risk_cuts,
+       fill = plotclr, cex = .75, ncol = 1, bty = "n")
+
+
 
 # posterior median
 socio_samples = socio_dismap$samples$phi
