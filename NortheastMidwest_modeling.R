@@ -399,6 +399,7 @@ socio_dismap = S.CARleroux(formula = asthma_count ~log(offset(total_population))
                          burnin = 50000,
                          n.sample = 200000,
                          thin = 1,
+                         rho=1,
                          prior.mean.beta = NULL,
                          prior.var.beta = NULL,
                          prior.nu2 = NULL,
@@ -419,7 +420,7 @@ for(i in 1:length(socio_betas)){
 
 
 socio_dismap$summary.results
-  # pct_black: non-significant based on the 95% credible interval. Overall, pct_black is negatively related to asthma prevalence
+  # pct_black: non-significant based on the 95% credible interval. Overall, pct_black is positively related to asthma prevalence
   # pct_high_school: non-significant based on the 95% credible interval. Overall, pct_high_school is negatively related to asthma prevalence
   # tau^2: measure of spatial variation. The estimate is positive suggesting that we have more events than what we would expect randomly
 
